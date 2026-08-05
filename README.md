@@ -67,7 +67,7 @@ conda create -n medidoc python=3.12 -y
 conda activate medidoc
 
 # 2. 安装依赖(与 pyproject.toml 对齐)
-pip install openai pydantic python-dotenv pyyaml httpx pytest pytest-mock ruff mypy pygments
+pip install openai pydantic python-dotenv pyyaml httpx qdrant-client pypdf pytest pytest-mock ruff mypy pygments
 
 # 3. 运行测试(离线 mock,零真实 API 调用)
 pytest
@@ -106,14 +106,37 @@ python scripts/chat.py
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 一 | 脚手架 + 双供应商接入 + MVP 红线 + 质量基线 | ✅ 进行中(待人工验收) |
-| 二 | 数据管道:manifest 合规 + 解析 + SQLite/Qdrant/BM25 入库 + reindex.py | ⬜ 未开始 |
+| 一 | 脚手架 + 双供应商接入 + MVP 红线 + 质量基线 | ✅ 已完成(已验收) |
+| 二 | 数据管道:manifest 合规 + 解析 + SQLite/Qdrant/BM25 入库 + reindex.py | 🔄 进行中(待人工验收) |
 | 三 | 双通道检索 + direct_rag + 观测日志 + 注入防护 | ⬜ 未开始 |
 | 四 | 手写 ReAct Agent + agentic_rag + 护栏 | ⬜ 未开始 |
 | 五 | 评估体系 + direct/agentic 对比 + 调参 | ⬜ 未开始 |
 | 六 | Streamlit UI + Docker 部署 + 收尾 | ⬜ 未开始 |
 
 每阶段完成:更新本 README → 输出 Git diff 摘要 → **人工验收通过后**才进入下一阶段。
+
+## 数据管道(阶段二)
+
+```
+PMC OA 文献(JATS XML)                      合规:仅开放许可,不碰版权不明 PDF
+   │  scripts/fetch_pmc.py                  manifest.jsonl(document_id/sha256/license/...)
+   ▼
+解析器 src/ingest/parser.py                XML 优先(排除参考文献),PDF 通用(扫描件报错)
+   ▼
+分块器 src/ingest/chunker.py               600/100 token,与段落对齐,确定性 chunk_id
+   ▼
+embedding(SiliconFlow BAAI/bge-m3,1024 维)
+   ▼
+三存储:SQLite(事实来源)→ Qdrant(向量)+ BM25(关键词,手写)
+   │  状态机:pending → indexing → ready / failed / deleted
+   │  三存储数量校验通过才标记 ready;失败可重试
+   ▼
+scripts/ingest.py(入库)/ scripts/reindex.py(重建派生索引)
+```
+
+- **SQLite 是唯一事实来源**,Qdrant 与 BM25 均为可重建派生索引(`reindex.py` 按 SQLite + manifest + 原始文档确定性重建)
+- 更换 embedding 模型 / 维度 / 分块策略 → 必须重建索引(维度不匹配时 QdrantStore 直接报错)
+- 当前语料:5 篇 MR-to-CT 模态合成主题顶刊 OA 文献(Medical Physics×2 / Magnetic Resonance in Medicine / Phys Med Biol / NeuroImage: Clinical),265 chunks
 
 ## 免责声明
 
