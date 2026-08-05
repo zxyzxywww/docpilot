@@ -1,0 +1,32 @@
+name: CI
+
+# 约束 9:CI 默认仅运行离线 mock 测试,不调用任何真实付费 API。
+# integration 标记的测试(需要真实 key)在 CI 中一律跳过。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies (uv sync, locked)
+        run: uv sync --all-groups --locked
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Type check (mypy)
+        run: uv run mypy src
+
+      - name: Tests (offline mock only, no real API)
+        run: uv run pytest -m "not integration" -v

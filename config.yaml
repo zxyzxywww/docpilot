@@ -1,0 +1,77 @@
+# ============================================================
+# MediDoc 配置中心 —— 所有可调参数集中管理
+# 模型 / 检索 / 分块 / 数据库 / 预算 / 日志 全部在此
+# ============================================================
+
+# ---- MVP 定位红线(同时写入 README 与 system prompt)----
+mvp:
+  purpose: "仅用于公开医学文献检索与研究辅助"
+  no_patient_data: true           # 禁止处理真实患者隐私数据
+  no_medical_advice: true         # 不提供诊断或治疗决策
+  refuse_without_evidence: true   # 证据不足必须拒答
+  citations_required: true        # 重要医学结论必须有真实检索证据和引用
+
+# ---- LLM 供应商(全部 API,无本地模型)----
+llm:
+  chat:
+    provider: "deepseek"
+    base_url: "https://api.deepseek.com"
+    model: "deepseek-v4-flash"    # 开发期;效果不足可切 deepseek-v4-pro
+    temperature: 0.2
+    max_tokens: 2048
+    timeout_seconds: 60
+    max_retries: 3
+    backoff_base_seconds: 1.0
+    # 前缀缓存利用:固定 system + 文档块为共享前缀(降低费用)
+
+  embedding:
+    provider: "siliconflow"
+    base_url: "https://api.siliconflow.cn/v1"
+    model: "BAAI/bge-m3"          # 固定;变更模型/维度/分块策略必须重建索引
+    dimension: 1024
+    batch_size: 32
+    max_concurrency: 4
+    timeout_seconds: 60
+    max_retries: 3
+
+  rerank:
+    provider: "siliconflow"
+    base_url: "https://api.siliconflow.cn/v1"
+    model: "BAAI/bge-reranker-v2-m3"
+    batch_size: 16
+    timeout_seconds: 60
+    max_retries: 3
+
+# ---- 检索链路默认参数(由阶段五评估结果调整)----
+retrieval:
+  dense_top_k: 30                 # 向量通道召回数
+  bm25_top_k: 30                  # BM25 通道召回数
+  rrf_top_k: 30                   # RRF 融合后取前 N
+  rerank_top_k: 20                # rerank 后保留数
+  final_context_k: 6              # 最终注入生成的上下文数
+  rrf_k: 60                       # RRF 融合常数
+
+# ---- 分块策略 ----
+chunking:
+  chunk_size_tokens: 600
+  chunk_overlap_tokens: 100
+
+# ---- 存储 ----
+database:
+  sqlite_path: "data/db/medidoc.db"     # 唯一事实来源(文档/chunk 元数据/导入状态)
+  qdrant:
+    mode: "local"                       # local(开发) | docker(部署)
+    path: "data/db/qdrant"              # local mode 持久化目录(可重建派生索引)
+    collection: "medidoc_chunks"
+    docker_url: "http://localhost:6333"
+
+# ---- 成本预算(学生预算,全透明)----
+budget:
+  max_cost_yuan: 50.0                   # 开发期总预算上限
+  max_tokens_per_query: 8000            # 单次查询 token 上限(护栏用)
+  track_costs: true                     # 观测日志记录估算费用
+
+# ---- 观测日志(约束 7:轻量可观测)----
+logging:
+  level: "INFO"
+  trace: true                           # 输出 trace_id / 延迟 / token / 费用
