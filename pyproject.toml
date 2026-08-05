@@ -1,0 +1,23 @@
+[project]
+name = "medidoc"
+version = "0.1.0"
+description = "MediDoc - 医学文献智能问答 Agent(仅用于公开医学文献检索与研究辅助,不提供医疗建议)"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+    "integration: 需要真实 API key 的集成测试(默认跳过)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
