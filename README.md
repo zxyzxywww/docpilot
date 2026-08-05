@@ -58,26 +58,36 @@ medidoc/
 
 ## 快速开始
 
-```bash
-# 1. 安装 uv(https://docs.astral.sh/uv/)并同步依赖
-uv sync --all-groups
+> ⚠️ 本机注意:项目在 Windows 挂载盘 `/mnt/e` 上,`.venv`(符号链接)在此盘上不可靠,已被删除。
+> **推荐用 conda 环境**(解释器在 Linux 原生盘,稳定):
 
-# 2. 配置 API key
-cp .env.example .env        # 填入 DEEPSEEK_API_KEY(可选 SILICONFLOW_API_KEY)
+```bash
+# 1. 创建 conda 环境(Python 3.12)并激活
+conda create -n medidoc python=3.12 -y
+conda activate medidoc
+
+# 2. 安装依赖(与 pyproject.toml 对齐)
+pip install openai pydantic python-dotenv pyyaml httpx pytest pytest-mock ruff mypy pygments
 
 # 3. 运行测试(离线 mock,零真实 API 调用)
-uv run pytest
+pytest
 
-# 4. 对话测试(需要真实 DEEPSEEK_API_KEY)
-uv run python scripts/chat.py
+# 4. 质量检查
+ruff check .
+mypy src
+
+# 5. 对话测试(需要真实 DEEPSEEK_API_KEY,先 cp .env.example .env 并填入)
+python scripts/chat.py
 ```
+
+> 若你已安装 uv(其他机器),也可以用 `uv sync --all-groups` 管理,命令等效。
 
 ## 测试与质量
 
-- `uv run pytest`:离线 mock 测试,默认**不**调用任何真实付费 API
-- `uv run pytest -m integration`:真实 API 集成测试,需 `.env` 配置 key 后手动运行
-- `uv run ruff check .`:lint
-- `uv run mypy src`:类型检查
+- `pytest`:离线 mock 测试,默认**不**调用任何真实付费 API
+- `pytest -m integration`:真实 API 集成测试,需 `.env` 配置 key 后手动运行
+- `ruff check .`:lint
+- `mypy src`:类型检查
 - GitHub Actions CI(`.github/workflows/ci.yml`):仅运行离线 mock 测试,不调付费 API
 
 ## 成本预算(学生友好)
