@@ -283,6 +283,17 @@ class QdrantStore:
         ]
         self._client.upsert(self._collection, points=points)
 
+    def query(self, vector: list[float], top_k: int) -> list[dict[str, Any]]:
+        """向量查询:返回 top_k 个点的 payload(按相似度降序)。"""
+        hits = self._client.query_points(
+            self._collection, query=vector, limit=top_k, with_payload=True
+        )
+        payloads: list[dict[str, Any]] = []
+        for h in hits.points:
+            if h.payload is not None:
+                payloads.append(h.payload)
+        return payloads
+
     def count_document(self, doc_id: str) -> int:
         result = self._client.count(
             self._collection,
