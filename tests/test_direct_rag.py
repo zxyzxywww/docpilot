@@ -50,6 +50,7 @@ def _ctx() -> list[RetrievedChunk]:
             paragraph=2,
             text="synthetic CT generation uses deep learning.",
             source_url="https://example.org/PMC1",
+            score=0.9,
         ),
         RetrievedChunk(
             chunk_id="d2_c0001",
@@ -59,6 +60,7 @@ def _ctx() -> list[RetrievedChunk]:
             paragraph=5,
             text="diffusion models achieve high fidelity.",
             source_url="https://example.org/PMC2",
+            score=0.8,
         ),
     ]
 
@@ -78,6 +80,23 @@ def test_refusal_when_no_evidence(tmp_path: Path) -> None:
     assert out.refused is True
     assert "证据不足" in out.answer
     store.close()
+
+
+def test_refusal_when_low_relevance(tmp_path: Path) -> None:
+    """rerank 分数低于阈值 → 证据不足拒答(防硬答)。"""
+    store = SQLiteStore(tmp_path / "db.sqlite")
+    rag = DirectRAG(FakeChat("unused"), store)  # type: ignore[arg-type]
+    low_score = [_chunk_low()]
+    out = rag.answer(_prepared(), RetrievalOutput(context=low_score, candidates=low_score))
+    assert out.refused is True
+    assert "相关性不足" in out.answer
+    store.close()
+
+
+def _chunk_low() -> RetrievedChunk:
+    c = _ctx()[0]
+    c.score = 0.05
+    return c
 
 
 def test_answer_parses_citations(tmp_path: Path) -> None:

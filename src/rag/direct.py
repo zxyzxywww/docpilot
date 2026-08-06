@@ -70,9 +70,10 @@ class RagAnswer:
 class DirectRAG:
     """直接 RAG:单跳简单问题走此路径(复杂问题阶段四交给 Agent)。"""
 
-    def __init__(self, chat: ChatClient, sqlite: SQLiteStore):
+    def __init__(self, chat: ChatClient, sqlite: SQLiteStore, min_relevance_score: float = 0.3):
         self._chat = chat
         self._sqlite = sqlite
+        self._min_relevance = min_relevance_score
         self._doc_cache: dict[str, dict] = {}
 
     def answer(self, prepared: PreparedQuery, retrieval: RetrievalOutput) -> RagAnswer:
@@ -82,6 +83,15 @@ class DirectRAG:
                 answer="检索不到与问题相关的文献证据,无法回答(证据不足)。",
                 refused=True,
                 trace={"evidence_chunks": 0},
+            )
+
+        # 证据相关性预检(rerank 分数过低 → 证据不足,防硬答)
+        scores = [c.score for c in context]
+        if max(scores) < self._min_relevance:
+            return RagAnswer(
+                answer="检索到的文献证据与问题相关性不足,无法可靠回答(证据不足)。",
+                refused=True,
+                trace={"evidence_chunks": len(context), "max_relevance": round(max(scores), 4)},
             )
 
         evidence_block = self._build_evidence_block(context)

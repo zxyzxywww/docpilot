@@ -53,7 +53,7 @@ def build_pipeline(config, embedder, chat, rerank):
     dense = DenseRetriever(qdrant)
     bm25_retriever = BM25Retriever(bm25, sqlite)
     pipeline = RetrieverPipeline(dense, bm25_retriever, rerank, config.retrieval)
-    rag = DirectRAG(chat, sqlite)
+    rag = DirectRAG(chat, sqlite, config.rag.min_relevance_score)
     preprocessor = QueryPreprocessor(chat)
     return sqlite, qdrant, pipeline, rag, preprocessor
 

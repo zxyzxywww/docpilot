@@ -79,6 +79,10 @@ agent:
   max_consecutive_repeat: 2             # 连续重复同一动作次数上限(防死循环)
   max_cost_yuan_per_query: 0.5          # 单次查询费用预算
 
+# ---- 生成层(阶段五调参:拒答相关性阈值)----
+rag:
+  min_relevance_score: 0.3              # 检索证据相关性下限(rerank 分数),低于则拒答
+
 # ---- 观测日志(约束 7:轻量可观测)----
 logging:
   level: "INFO"

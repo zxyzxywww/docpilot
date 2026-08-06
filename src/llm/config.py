@@ -92,6 +92,10 @@ class AgentConfig(BaseModel):
     max_cost_yuan_per_query: float = 0.5
 
 
+class RagConfig(BaseModel):
+    min_relevance_score: float = 0.3  # 检索证据相关性下限(rerank 分数),低于则拒答
+
+
 class AppConfig(BaseModel):
     mvp: dict[str, Any] = Field(default_factory=dict)
     llm: dict[str, Any] = Field(default_factory=dict)
@@ -100,6 +104,7 @@ class AppConfig(BaseModel):
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+    rag: RagConfig = Field(default_factory=RagConfig)
     logging: dict[str, Any] = Field(default_factory=dict)
 
     @property

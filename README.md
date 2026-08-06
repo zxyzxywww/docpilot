@@ -221,3 +221,50 @@ python scripts/query.py --mode agentic "比较GAN和扩散模型在合成CT生�
 python scripts/query.py --mode auto "任意问题"        # 自动路由
 ```
 
+## 评估体系(阶段五)
+
+### 学习点 L9:评估集构建(反向生成 + 自动核验)
+- **反向生成**:从语料抽样段落 → DeepSeek 依据段落生成问答对(段落即标准答案,零人工标注);
+- **自动核验**:抽样 20% 由 LLM-as-judge 打"忠实度"分,低于阈值剔除(仅辅助,非唯一标准);
+- **按文档划分 dev/test**:开发集与测试集来自不同文档,防止同一文档内容泄漏;
+- **≥20% 无答案问题**:库外事实/沾边话题类问题,检验拒答能力;
+- 当前评估集:`data/eval/dataset.jsonl`,40 条(dev 10 / test 30,无答案 26.7%)。
+
+### 学习点 L10:检索与生成指标
+- **检索**:Recall@5 / Recall@10 / MRR / nDCG@10 —— 衡量"相关证据是否被召回且排前";
+- **生成**:无证据拒答率 / 引用完整率 / 引用准确率 / 完整性 —— 衡量"答得对、有据可查";
+- LLM-as-judge(正确性/忠实度)仅作辅助,最终以人工核验为准。
+
+### 评估结果(2026-08,test 集 30 条,direct_rag)
+
+| 指标 | Baseline | 调参后 | 说明 |
+|---|---|---|---|
+| Recall@5 | 0.9545 | 0.9545 | 检索召回稳定 |
+| MRR | 0.8500 | **0.9030** | 首条相关证据位置提前 |
+| nDCG@10 | 0.8866 | **0.9261** | 排序质量提升 |
+| 引用准确率 | 0.6280 | **0.7742** | 引用的证据更精准(相关性预检) |
+| 引用完整率 | 1.0 | 1.0 | 全部回答带引用 |
+| 无证据拒答率 | 0.50 | 0.50 | 库外事实型全部拒答;语义沾边型为已知难点 |
+| 平均费用 | 0.0066 元/问 | **0.0057 元/问** | 前缀缓存 + 精简上下文 |
+
+**调参动作**:引入"证据相关性预检"(config `rag.min_relevance_score`,rerank 分数低于阈值直接拒答)+ 精简检索上下文。
+
+### direct vs agentic 对比(5 条小样本)
+
+| 路径 | 引用完整率 | 平均费用 |
+|---|---|---|
+| direct_rag | 1.0 | **0.0045 元/问** |
+| agentic_rag | 1.0 | 0.0174 元/问(约 4 倍) |
+
+→ 验证设计:简单单跳问题走 direct(便宜),复杂综合问题才走 agentic(贵但能多步检索)。
+
+### 评估用法
+
+```bash
+python scripts/evaluate.py --build                 # 重建评估集
+python scripts/evaluate.py --split test            # test 集评估
+python scripts/evaluate.py --split dev             # dev 集调参
+python scripts/evaluate.py --split test --judge    # 附加 LLM-as-judge
+python scripts/evaluate.py --compare-agentic       # direct vs agentic 对比
+```
+
