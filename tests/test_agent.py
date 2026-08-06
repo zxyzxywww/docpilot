@@ -211,17 +211,13 @@ def test_loop_invalid_params_reported(tmp_path: Path) -> None:
 def test_build_citations_only_keeps_referenced(tmp_path: Path) -> None:
     """final answer 只引用 [2] 时,citations 只保留第 2 条证据(防罗列全部)。"""
     ctx = _ctx(tmp_path)
-    ctx.gathered.extend(
-        [
-            RetrievedChunk(
-                chunk_id="d1_c0001", document_id="d1", section="Intro", page="",
-                paragraph=1, text="chunk one text", source_url="u1", score=1.0,
-            ),
-            RetrievedChunk(
-                chunk_id="d1_c0002", document_id="d1", section="Methods", page="",
-                paragraph=2, text="chunk two text", source_url="u1", score=1.0,
-            ),
-        ]
+    ctx.gathered[1] = RetrievedChunk(
+        chunk_id="d1_c0001", document_id="d1", section="Intro", page="",
+        paragraph=1, text="chunk one text", source_url="u1", score=1.0,
+    )
+    ctx.gathered[2] = RetrievedChunk(
+        chunk_id="d1_c0002", document_id="d1", section="Methods", page="",
+        paragraph=2, text="chunk two text", source_url="u1", score=1.0,
     )
     loop = AgentLoop(FakeChat([]), ctx, _cfg(), ConversationMemory())  # type: ignore[arg-type]
     citations = loop._build_citations("综合 [2] 的证据,扩散模型更优。")
@@ -233,11 +229,9 @@ def test_build_citations_only_keeps_referenced(tmp_path: Path) -> None:
 def test_build_citations_drops_out_of_range(tmp_path: Path) -> None:
     """模型编造不存在的编号 [5] 应被丢弃(防幻觉)。"""
     ctx = _ctx(tmp_path)
-    ctx.gathered.append(
-        RetrievedChunk(
-            chunk_id="d1_c0001", document_id="d1", section="Intro", page="",
-            paragraph=1, text="t", source_url="u", score=1.0,
-        )
+    ctx.gathered[1] = RetrievedChunk(
+        chunk_id="d1_c0001", document_id="d1", section="Intro", page="",
+        paragraph=1, text="t", source_url="u", score=1.0,
     )
     loop = AgentLoop(FakeChat([]), ctx, _cfg(), ConversationMemory())  # type: ignore[arg-type]
     assert loop._build_citations("编造的编号 [5] 应被丢弃。") == []
@@ -256,14 +250,15 @@ def test_evidence_text_global_numbering(tmp_path: Path) -> None:
         chunk_id="d1_c0002", document_id="d1", section="Methods", page="",
         paragraph=2, text="second chunk", source_url="u", score=1.0,
     )
-    # 第一次检索:gathered 为空,编号从 1 开始
+    # 第一次检索:编号从 1 开始,并写入 gathered
     text1 = _evidence_text(ctx, [c1])
     assert "[1]" in text1
-    ctx.gathered.append(c1)
-    # 第二次检索:gathered 已有 1 条,编号从 2 开始(不重置)
+    assert ctx.gathered[1].chunk_id == "d1_c0001"
+    # 第二次检索:编号从 2 开始(不重置)
     text2 = _evidence_text(ctx, [c2])
     assert "[2]" in text2
     assert "[1]" not in text2
+    assert ctx.gathered[2].chunk_id == "d1_c0002"
 
 
 # ---------------------------------------------------------------- 路由

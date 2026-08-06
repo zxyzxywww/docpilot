@@ -30,7 +30,22 @@ class ToolContext:
     chat: ChatClient
     sqlite: SQLiteStore
     preprocessor: QueryPreprocessor
-    gathered: list[RetrievedChunk] = field(default_factory=list)  # 会话中收集的证据
+    gathered: dict[int, RetrievedChunk] = field(default_factory=dict)  # 证据编号 → chunk
+    citation_seq: int = 0  # 全局证据编号分配器(单调递增;超时迟到线程不会重复分配)
+
+
+def _assign_numbers(ctx: ToolContext, chunks: list[RetrievedChunk]) -> int:
+    """为 chunks 分配全局递增编号并写入 gathered,返回起始编号。
+
+    编号分配与写入原子化(同一函数内完成):即使工具超时后线程在后台迟到
+    完成,也只是向 dict 追加已分配编号的条目,不影响主循环已分配的编号,
+    引用映射不会被破坏。
+    """
+    start = ctx.citation_seq + 1
+    ctx.citation_seq += len(chunks)
+    for i, c in enumerate(chunks):
+        ctx.gathered[start + i] = c
+    return start
 
 
 @dataclass
@@ -62,9 +77,8 @@ def _retrieve(ctx: ToolContext, query: str, top_k: int) -> list[RetrievedChunk]:
 
 
 def _evidence_text(ctx: ToolContext, chunks: list[RetrievedChunk]) -> str:
-    """证据文本使用全局递增编号(与 ctx.gathered 顺序一致),保证模型 [n]
-    与最终引用映射一致(多次检索时编号不重置)。"""
-    start = len(ctx.gathered) + 1
+    """证据文本使用全局递增编号(见 _assign_numbers),与 gathered 映射一致。"""
+    start = _assign_numbers(ctx, chunks)
     return "\n\n".join(
         f"[{start + i}] ({c.document_id[:8]} | {c.section}) {c.text[:EVIDENCE_LIMIT]}"
         for i, c in enumerate(chunks)
@@ -88,8 +102,7 @@ class SearchLiterature(Tool):
         chunks = _retrieve(ctx, p.question, p.top_k)
         if not chunks:
             return ToolResult(ok=False, content="检索未命中任何相关证据,请换个说法或放宽条件。")
-        text = _evidence_text(ctx, chunks)  # 先生成文本(编号基于当前 gathered),再收集
-        ctx.gathered.extend(chunks)
+        text = _evidence_text(ctx, chunks)  # 分配编号并写入 gathered
         return ToolResult(
             ok=True,
             content=text,
@@ -126,8 +139,7 @@ class SummarizePaper(Tool):
         summary = ctx.chat.chat(
             [{"role": "user", "content": prompt}], max_tokens=1024
         ).text
-        text = _evidence_text(ctx, chunks)
-        ctx.gathered.extend(chunks)
+        text = _evidence_text(ctx, chunks)  # 分配编号并写入 gathered
         return ToolResult(
             ok=True,
             content=summary + "\n\n[证据来源编号]\n" + text,
@@ -153,10 +165,8 @@ class GetCitation(Tool):
         chunks = _retrieve(ctx, p.claim, 3)
         if not chunks:
             return ToolResult(ok=False, content="未找到支撑该论断的证据(证据不足)。")
-        ctx.gathered.extend(chunks)
+        start = _assign_numbers(ctx, chunks)  # 与 _evidence_text 同一编号机制
         lines = []
-        # GetCitation 的证据编号也要全局递增,与 gathered 顺序一致
-        start = len(ctx.gathered) - len(chunks) + 1
         for i, c in enumerate(chunks):
             doc = ctx.sqlite.get_document(c.document_id) or {}
             lines.append(

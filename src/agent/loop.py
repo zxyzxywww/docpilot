@@ -206,17 +206,17 @@ class AgentLoop:
     def _build_citations(self, answer: str) -> list[Citation]:
         """从最终答案的 [n] 标注构建引用(只保留实际被引用的证据)。
 
-        gathered 按出现顺序编号,且工具输出使用全局递增编号(见 tools.py
-        _evidence_text),因此模型 final answer 中的 [n] 直接映射到
-        gathered[n-1],越界编号丢弃(防幻觉)。
+        gathered 是"编号 → chunk"映射(见 tools.py _assign_numbers,全局递增、
+        分配与写入原子化),模型 final answer 中的 [n] 直接取 gathered[n],
+        缺失编号丢弃(防幻觉)。迟到线程的写入不会影响已分配编号。
         """
-        gathered = list(self._ctx.gathered)
+        gathered = dict(self._ctx.gathered)
         indices = {int(n) for n in re.findall(r"\[(\d+)\]", answer)}
         citations: list[Citation] = []
         for idx in sorted(indices):
-            if not (1 <= idx <= len(gathered)):
+            chunk = gathered.get(idx)
+            if chunk is None:
                 continue  # 模型编造了不存在的编号 → 丢弃
-            chunk = gathered[idx - 1]
             doc = self._ctx.sqlite.get_document(chunk.document_id) or {}
             citations.append(
                 Citation(
