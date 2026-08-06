@@ -84,6 +84,14 @@ class BudgetConfig(BaseModel):
     track_costs: bool = True
 
 
+class AgentConfig(BaseModel):
+    max_steps: int = 8
+    tool_timeout_seconds: float = 30.0
+    max_tool_retries: int = 2
+    max_consecutive_repeat: int = 2
+    max_cost_yuan_per_query: float = 0.5
+
+
 class AppConfig(BaseModel):
     mvp: dict[str, Any] = Field(default_factory=dict)
     llm: dict[str, Any] = Field(default_factory=dict)
@@ -91,6 +99,7 @@ class AppConfig(BaseModel):
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
     logging: dict[str, Any] = Field(default_factory=dict)
 
     @property

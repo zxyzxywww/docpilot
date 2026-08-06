@@ -189,3 +189,35 @@ python scripts/query.py "磁共振到CT图像合成一般用什么深度学习�
 python scripts/query.py --verbose "问题"   # 显示完整引用与观测详情
 ```
 
+## Agent(阶段四)
+
+### 学习点 L8:ReAct 循环
+- **ReAct = Reasoning + Acting**:模型交替输出"推理(Thought)→ 动作(Action)→ 观察(Observation)",直到给出最终答案;
+- 相比一次性 RAG,Agent 能**多步检索、修正查询、综合多篇证据**,适合"比较/冲突/综合"类复杂问题;
+- 本项目手写实现(不依赖 LangChain):`src/agent/loop.py`;
+- **思维链只存在于 prompt 内部**,README 与日志只展示结构化工具轨迹(工具名/耗时/成功与否),不保存完整思维链(约束 9)。
+
+### 双路径路由(约束 5)
+- 单跳简单问题 → `direct_rag`(快、省,阶段三路径);
+- 多文档比较 / 证据冲突 / 复杂综合 → `agentic_rag`(Agent 多步工具调用);
+- 路由:启发式(长度 + 语义关键词),`src/agent/router.py`,CLI `--mode auto|direct|agentic`。
+
+### Agent 工具(全部 Pydantic 参数校验)
+| 工具 | 作用 |
+|---|---|
+| `search_literature` | 检索医学文献库,返回带来源的证据段落 |
+| `summarize_paper` | 定位并总结某篇论文(仅基于库内证据) |
+| `get_citation` | 为论断检索支撑证据,返回可溯源引用 |
+
+### Agent 护栏(config.yaml `agent` 段,全部可配置)
+- `max_steps`:循环最大步数;`tool_timeout_seconds`:工具超时;
+- `max_tool_retries`:失败重试;`max_consecutive_repeat`:连续重复动作检测(防死循环);
+- `max_cost_yuan_per_query`:单次查询费用预算。
+
+### Agent 用法
+
+```bash
+python scripts/query.py --mode agentic "比较GAN和扩散模型在合成CT生成上的差异"
+python scripts/query.py --mode auto "任意问题"        # 自动路由
+```
+

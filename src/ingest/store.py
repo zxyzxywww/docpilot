@@ -53,7 +53,9 @@ class SQLiteStore:
     def __init__(self, path: str | Path):
         self._path = str(path)
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self._path)
+        # check_same_thread=False:Agent 工具在线程池中执行,需允许跨线程读;
+        # 本项目中同一时刻仅一个工具在跑(ThreadPoolExecutor max_workers=1),无并发写风险。
+        self._conn = sqlite3.connect(self._path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._init_schema()
 

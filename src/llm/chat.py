@@ -94,3 +94,29 @@ class ChatClient:
             cache_hit_tokens=getattr(usage, "prompt_cache_hit_tokens", 0) or 0,
             cache_miss_tokens=getattr(usage, "prompt_cache_miss_tokens", 0) or 0,
         )
+
+    def stream_chat(
+        self,
+        messages: list[ChatCompletionMessageParam],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ):
+        """流式对话:逐个产出文本增量(供 Web 界面实时展示)。
+
+        用法:for delta in client.stream_chat(messages): ...
+        token 统计在流结束后不完整,费用估算请用非流式 chat。
+        """
+        stream = self._client.chat.completions.create(
+            model=self.config.model,
+            messages=messages,
+            temperature=temperature if temperature is not None else self.config.temperature,
+            max_tokens=max_tokens if max_tokens is not None else self.config.max_tokens,
+            stream=True,
+        )
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta

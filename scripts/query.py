@@ -1,13 +1,15 @@
-"""问答 CLI:完整的 direct_rag 路径。
+"""问答 CLI:direct_rag 与 agentic_rag 双路径(约束 5)。
 
-编排(阶段三全链路):
-    中文问题 → QueryPreprocessor(翻译+术语扩展)→ bge-m3 向量
-    → RetrieverPipeline(双通道+RRF+rerank)→ DirectRAG(带引用生成)
-    → Tracer 观测日志(trace_id/延迟/token/费用/chunk_id)
+- direct 路径:中文问题 → QueryPreprocessor(翻译+术语扩展)→ bge-m3 向量
+  → RetrieverPipeline(双通道+RRF+rerank)→ DirectRAG(带引用生成);
+- agentic 路径:AgentLoop 多步调用工具(search_literature / summarize_paper /
+  get_citation)完成复杂综合;README 只展示结构化工具轨迹,不存思维链;
+- auto(默认):按问题复杂度自动路由(router.py)。
 
 用法:
     python scripts/query.py "磁共振到CT合成一般用什么深度学习方法?"
-    python scripts/query.py --verbose "问句"(显示完整引用与观测信息)
+    python scripts/query.py --mode agentic "比较GAN和扩散模型在合成CT上的差异"
+    python scripts/query.py --verbose "问句"(显示引用与观测)
 需要 .env 配置 DEEPSEEK_API_KEY 与 SILICONFLOW_API_KEY。
 """
 
@@ -41,7 +43,6 @@ def build_pipeline(config, embedder, chat, rerank):
     sqlite = SQLiteStore(config.database.sqlite_path)
     qdrant = QdrantStore(config.database.qdrant, config.embedding.dimension)
     bm25 = BM25Index()
-    # BM25 派生索引:从 SQLite(事实来源)重建
     ids, texts = [], []
     for doc in sqlite.all_ready_documents():
         for chunk in sqlite.get_chunks(doc["document_id"]):
@@ -57,15 +58,71 @@ def build_pipeline(config, embedder, chat, rerank):
     return sqlite, qdrant, pipeline, rag, preprocessor
 
 
+def _build_agent(config, chat, embedder, rerank, sqlite, pipeline, preprocessor):
+    from agent import AgentLoop, ConversationMemory, ToolContext
+
+    ctx = ToolContext(
+        pipeline=pipeline,
+        embedder=embedder,
+        chat=chat,
+        sqlite=sqlite,
+        preprocessor=preprocessor,
+    )
+    return AgentLoop(chat, ctx, config.agent, ConversationMemory())
+
+
+def _run_direct(config, embedder, pipeline, rag, preprocessor, question, tracer):
+    prepared = preprocessor.prepare(question)
+    tracer.step(
+        "query_prep",
+        translated_query=prepared.translated_query,
+        expanded_terms=prepared.expanded_terms,
+    )
+    query_vector = embedder.embed([question])[0]
+    tracer.step("embed", dim=len(query_vector))
+    retrieval = pipeline.retrieve(query_vector, question, translated_query=prepared.bm25_query)
+    tracer.step(
+        "retrieve",
+        recall_chunk_ids=[c.chunk_id for c in retrieval.context],
+        **retrieval.trace,
+    )
+    answer = rag.answer(prepared, retrieval)
+    tracer.step(
+        "generate",
+        prompt_tokens=answer.trace.get("prompt_tokens"),
+        completion_tokens=answer.trace.get("completion_tokens"),
+        estimated_cost_yuan=answer.trace.get("estimated_cost_yuan"),
+        cited_chunk_ids=[c.chunk_id for c in answer.citations],
+    )
+    return answer.answer, answer.citations, answer.refused, None
+
+
+def _run_agentic(config, embedder, pipeline, preprocessor, sqlite, chat, question, tracer):
+    loop = _build_agent(config, chat, embedder, None, sqlite, pipeline, preprocessor)
+    tracer.step("agentic_route", mode="agentic")
+    answer = loop.run(question)
+    tracer.step(
+        "agent_loop",
+        steps=answer.steps,
+        stop_reason=answer.stop_reason,
+        estimated_cost_yuan=answer.total_cost_yuan,
+        tool_trace=answer.tool_trace,  # 结构化轨迹,不含思维链
+        cited_chunk_ids=[c.chunk_id for c in answer.citations],
+    )
+    return answer.answer, answer.citations, False, answer
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="MediDoc 医学文献问答(direct_rag)")
+    parser = argparse.ArgumentParser(description="MediDoc 医学文献问答(direct/agentic)")
     parser.add_argument("question", help="问题(中文或英文)")
+    parser.add_argument("--mode", choices=["auto", "direct", "agentic"], default="auto")
     parser.add_argument("--verbose", action="store_true", help="显示引用与观测详情")
     args = parser.parse_args()
 
     config = load_config()
-    logging.basicConfig(level=getattr(logging, config.logging.get("level", "INFO")),
-                        format="%(message)s")
+    logging.basicConfig(
+        level=getattr(logging, config.logging.get("level", "INFO")), format="%(message)s"
+    )
     if not config.logging.get("trace", True):
         logging.getLogger("medidoc.trace").setLevel(logging.CRITICAL)
 
@@ -75,51 +132,42 @@ def main() -> int:
     sqlite, qdrant, pipeline, rag, preprocessor = build_pipeline(
         config, embedder, chat, rerank
     )
-
     tracer = Tracer(enabled=config.logging.get("trace", True))
+
     try:
-        # 1. 查询预处理(翻译 + 术语扩展)
-        prepared = preprocessor.prepare(args.question)
-        tracer.step(
-            "query_prep",
-            translated_query=prepared.translated_query,
-            expanded_terms=prepared.expanded_terms,
-        )
+        if args.mode == "auto":
+            from agent.router import route
 
-        # 2. 向量化(原始问题 → 稠密通道)
-        query_vector = embedder.embed([args.question])[0]
-        tracer.step("embed", dim=len(query_vector))
+            mode = route(args.question)
+        else:
+            mode = args.mode
+        tracer.step("route", mode=mode)
 
-        # 3. 双通道检索 + RRF + rerank
-        retrieval = pipeline.retrieve(
-            query_vector, args.question, translated_query=prepared.bm25_query
-        )
-        tracer.step(
-            "retrieve",
-            recall_chunk_ids=[c.chunk_id for c in retrieval.context],
-            **retrieval.trace,
-        )
+        if mode == "agentic":
+            text, citations, refused, agent_info = _run_agentic(
+                config, embedder, pipeline, preprocessor, sqlite, chat, args.question, tracer
+            )
+        else:
+            text, citations, refused, agent_info = _run_direct(
+                config, embedder, pipeline, rag, preprocessor, args.question, tracer
+            )
 
-        # 4. 生成(带引用)
-        answer = rag.answer(prepared, retrieval)
-        tracer.step(
-            "generate",
-            prompt_tokens=answer.trace.get("prompt_tokens"),
-            completion_tokens=answer.trace.get("completion_tokens"),
-            estimated_cost_yuan=answer.trace.get("estimated_cost_yuan"),
-            cited_chunk_ids=[c.chunk_id for c in answer.citations],
-        )
-
-        # 5. 输出
         print("\n" + "=" * 60)
-        print("问题:", args.question)
+        print(f"问题: {args.question}   [路径: {mode}]")
         print("=" * 60)
-        print(answer.answer)
+        print(text)
         print("-" * 60)
-        if answer.refused:
+        if refused:
             print("[系统] 证据不足,已拒答")
+        if agent_info is not None and args.verbose:
+            print("[工具轨迹](不含思维链)")
+            for item in agent_info.tool_trace:
+                print(
+                    f"    step {item['step']}: {item['tool']} "
+                    f"ok={item['ok']} ({item['elapsed_s']}s)"
+                )
         if args.verbose:
-            for c in answer.citations:
+            for c in citations:
                 print(f"\n[{c.index}] {c.title}({c.journal})")
                 print(f"    章节: {c.section} | 段落: {c.paragraph} | chunk: {c.chunk_id}")
                 print(f"    来源: {c.source_url}")
