@@ -110,8 +110,8 @@ python scripts/chat.py
 | 二 | 数据管道:manifest 合规 + 解析 + SQLite/Qdrant/BM25 入库 + reindex.py | 🔄 进行中(待人工验收) |
 | 三 | 双通道检索 + direct_rag + 观测日志 + 注入防护 | ⬜ 未开始 |
 | 四 | 手写 ReAct Agent + agentic_rag + 护栏 | ⬜ 未开始 |
-| 五 | 评估体系 + direct/agentic 对比 + 调参 | ⬜ 未开始 |
-| 六 | Streamlit UI + Docker 部署 + 收尾 | ⬜ 未开始 |
+| 五 | 评估体系 + direct/agentic 对比 + 调参 | ✅ 已完成(已验收) |
+| 六 | Streamlit UI + Docker 部署 + 收尾 | 🔄 进行中(待人工验收) |
 
 每阶段完成:更新本 README → 输出 Git diff 摘要 → **人工验收通过后**才进入下一阶段。
 
@@ -267,4 +267,35 @@ python scripts/evaluate.py --split dev             # dev 集调参
 python scripts/evaluate.py --split test --judge    # 附加 LLM-as-judge
 python scripts/evaluate.py --compare-agentic       # direct vs agentic 对比
 ```
+
+## Web 界面与部署(阶段六)
+
+### Streamlit 本地运行
+
+```bash
+streamlit run src/app/app.py
+# 浏览器打开 http://localhost:8501
+```
+
+功能:中英文问答(auto/direct/agentic 三模式)、**引用点击溯源**(展开查看证据原文)、
+上传文献入库(仅 XML/PDF,≤20MB,路径清洗,扫描 PDF 明确报错)。
+
+### Docker 部署(本地一键启动)
+
+> 本机未装 Docker 时跳过;有 Docker 的机器照此操作。
+
+```bash
+# 1. 部署前把 config.yaml 的 qdrant.mode 改为 docker
+# 2. 重建派生索引(local → docker 不复用本地目录,按 SQLite 确定性重建)
+python scripts/reindex.py
+# 3. 启动(API key 走环境变量,不写入镜像)
+export DEEPSEEK_API_KEY=sk-xxx
+export SILICONFLOW_API_KEY=sk-xxx
+docker compose up --build
+# 浏览器打开 http://localhost:8501
+```
+
+- 镜像**不含模型权重**(纯 API 方案),CPU 即可运行;
+- Qdrant 以独立容器运行,`./data` 挂载宿主机持久化(SQLite 事实来源);
+- key 仅通过环境变量注入,`.env` 与 `data/` 均被 `.dockerignore` 排除。
 

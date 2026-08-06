@@ -1,0 +1,11 @@
+# 构建上下文排除(镜像不含数据/密钥/缓存)
+.git
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.env
+data/
+*.md

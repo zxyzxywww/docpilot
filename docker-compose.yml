@@ -1,0 +1,37 @@
+# MediDoc 部署编排:Qdrant 容器 + Streamlit 应用
+# 用法(在项目根目录):
+#   export DEEPSEEK_API_KEY=sk-xxx
+#   export SILICONFLOW_API_KEY=sk-xxx
+#   docker compose up --build
+#
+# 部署前:config.yaml 中 qdrant.mode 改为 docker(docker_url 默认 localhost:6333),
+# 然后执行 python scripts/reindex.py 从 SQLite 事实来源重建 Qdrant/BM25
+# (local → docker 切换不复用本地存储目录,约束 3)。
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  medidoc:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      # 事实来源(SQLite)与原始文献挂载到宿主机,持久化
+      - ./data:/app/data
+    depends_on:
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  qdrant_storage:
