@@ -61,9 +61,12 @@ def _retrieve(ctx: ToolContext, query: str, top_k: int) -> list[RetrievedChunk]:
     return retrieval.context[:top_k]
 
 
-def _evidence_text(chunks: list[RetrievedChunk]) -> str:
+def _evidence_text(ctx: ToolContext, chunks: list[RetrievedChunk]) -> str:
+    """证据文本使用全局递增编号(与 ctx.gathered 顺序一致),保证模型 [n]
+    与最终引用映射一致(多次检索时编号不重置)。"""
+    start = len(ctx.gathered) + 1
     return "\n\n".join(
-        f"[{i + 1}] ({c.document_id[:8]} | {c.section}) {c.text[:EVIDENCE_LIMIT]}"
+        f"[{start + i}] ({c.document_id[:8]} | {c.section}) {c.text[:EVIDENCE_LIMIT]}"
         for i, c in enumerate(chunks)
     )
 
@@ -85,10 +88,11 @@ class SearchLiterature(Tool):
         chunks = _retrieve(ctx, p.question, p.top_k)
         if not chunks:
             return ToolResult(ok=False, content="检索未命中任何相关证据,请换个说法或放宽条件。")
+        text = _evidence_text(ctx, chunks)  # 先生成文本(编号基于当前 gathered),再收集
         ctx.gathered.extend(chunks)
         return ToolResult(
             ok=True,
-            content=_evidence_text(chunks),
+            content=text,
             data={"chunk_ids": [c.chunk_id for c in chunks]},
         )
 
@@ -122,10 +126,11 @@ class SummarizePaper(Tool):
         summary = ctx.chat.chat(
             [{"role": "user", "content": prompt}], max_tokens=1024
         ).text
+        text = _evidence_text(ctx, chunks)
         ctx.gathered.extend(chunks)
         return ToolResult(
             ok=True,
-            content=summary,
+            content=summary + "\n\n[证据来源编号]\n" + text,
             data={
                 "document_id": doc_id,
                 "title": doc.get("title", ""),
@@ -150,10 +155,12 @@ class GetCitation(Tool):
             return ToolResult(ok=False, content="未找到支撑该论断的证据(证据不足)。")
         ctx.gathered.extend(chunks)
         lines = []
-        for c in chunks:
+        # GetCitation 的证据编号也要全局递增,与 gathered 顺序一致
+        start = len(ctx.gathered) - len(chunks) + 1
+        for i, c in enumerate(chunks):
             doc = ctx.sqlite.get_document(c.document_id) or {}
             lines.append(
-                f"- {doc.get('title', '')} | {c.section} | chunk: {c.chunk_id}\n"
+                f"[{start + i}] {doc.get('title', '')} | {c.section} | chunk: {c.chunk_id}\n"
                 f"  证据: {c.text[:200]}"
             )
         return ToolResult(

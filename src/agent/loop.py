@@ -26,7 +26,6 @@ from pydantic import ValidationError
 from llm import ChatClient
 from llm.config import AgentConfig
 from rag.direct import Citation
-from retriever.types import RetrievedChunk
 
 from .guardrails import Guardrails, StopReason
 from .memory import ConversationMemory
@@ -172,15 +171,16 @@ class AgentLoop:
             try:
                 future = pool.submit(tool.run, self._ctx, params)
                 result = future.result(timeout=self._cfg.tool_timeout_seconds)
+                pool.shutdown(wait=True)
                 return result.content, result.ok
             except FutureTimeout:
-                last_error = f"工具 {tool_name} 执行超时(>{self._cfg.tool_timeout_seconds}s)"
-            except Exception as exc:  # noqa: BLE001 - 工具错误统一转 Observation
-                last_error = f"工具 {tool_name} 执行失败: {exc}"
-            finally:
-                # 超时后不阻塞等待线程(wait=False),并尝试取消排队任务;
-                # 否则 with 退出时 shutdown(wait=True) 会让超时形同虚设。
+                # 超时后不再重试:工具线程可能仍在后台运行,重试会叠加后台线程
+                # 并与主循环后续工具并发访问共享依赖(sqlite)。
                 pool.shutdown(wait=False, cancel_futures=True)
+                return f"工具 {tool_name} 执行超时(>{self._cfg.tool_timeout_seconds}s)", False
+            except Exception as exc:  # noqa: BLE001 - 工具错误统一转 Observation
+                pool.shutdown(wait=False, cancel_futures=True)
+                last_error = f"工具 {tool_name} 执行失败: {exc}"
         return last_error, False
 
     def _finish(
@@ -206,23 +206,17 @@ class AgentLoop:
     def _build_citations(self, answer: str) -> list[Citation]:
         """从最终答案的 [n] 标注构建引用(只保留实际被引用的证据)。
 
-        会话中检索过的证据去重后按首次出现顺序编号;解析 Final Answer 中的
-        [n] 并映射到对应 chunk,越界编号丢弃(防幻觉,与 direct 路径一致)。
-        这样 UI 展示的引用与答案中的标注一一对应,可点击溯源。
+        gathered 按出现顺序编号,且工具输出使用全局递增编号(见 tools.py
+        _evidence_text),因此模型 final answer 中的 [n] 直接映射到
+        gathered[n-1],越界编号丢弃(防幻觉)。
         """
-        unique: list[RetrievedChunk] = []
-        seen: set[str] = set()
-        for chunk in self._ctx.gathered:
-            if chunk.chunk_id in seen:
-                continue
-            seen.add(chunk.chunk_id)
-            unique.append(chunk)
+        gathered = list(self._ctx.gathered)
         indices = {int(n) for n in re.findall(r"\[(\d+)\]", answer)}
         citations: list[Citation] = []
         for idx in sorted(indices):
-            if not (1 <= idx <= len(unique)):
+            if not (1 <= idx <= len(gathered)):
                 continue  # 模型编造了不存在的编号 → 丢弃
-            chunk = unique[idx - 1]
+            chunk = gathered[idx - 1]
             doc = self._ctx.sqlite.get_document(chunk.document_id) or {}
             citations.append(
                 Citation(

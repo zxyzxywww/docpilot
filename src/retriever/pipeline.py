@@ -79,7 +79,7 @@ class RetrieverPipeline:
             results = self._rerank.rerank(bm25_query, docs, top_n=self._cfg.rerank_top_k)
             ranked: list[RetrievedChunk] = []
             for r in results:
-                if r.index >= len(fused):
+                if r.index < 0 or r.index >= len(fused):
                     continue  # rerank 返回越界索引时防御性跳过
                 chunk = fused[r.index]
                 ranked.append(

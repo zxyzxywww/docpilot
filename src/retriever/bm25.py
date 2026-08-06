@@ -40,10 +40,6 @@ class BM25Retriever:
         return result
 
     def _chunk_meta(self, chunk_id: str) -> dict | None:
-        # 不缓存元数据:SQLite 是事实来源,文档删除/重入库后直接读最新状态,
-        # 避免派生索引侧缓存陈旧(检索返回已删除内容)。
-        doc_id = chunk_id.rsplit("_c", 1)[0]
-        for row in self._sqlite.get_chunks(doc_id):
-            if row["chunk_id"] == chunk_id:
-                return row
-        return None
+        # 直接按 chunk_id 单行查询:SQLite 是事实来源,文档删除/重入库后直接读
+        # 最新状态,避免派生索引侧缓存陈旧(检索返回已删除内容)。
+        return self._sqlite.get_chunk(chunk_id)

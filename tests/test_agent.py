@@ -243,6 +243,29 @@ def test_build_citations_drops_out_of_range(tmp_path: Path) -> None:
     assert loop._build_citations("编造的编号 [5] 应被丢弃。") == []
 
 
+def test_evidence_text_global_numbering(tmp_path: Path) -> None:
+    """修复:多次检索时证据编号全局递增,与 gathered 顺序一致(引用映射正确)。"""
+    from agent.tools import _evidence_text
+
+    ctx = _ctx(tmp_path)
+    c1 = RetrievedChunk(
+        chunk_id="d1_c0001", document_id="d1", section="Intro", page="",
+        paragraph=1, text="first chunk", source_url="u", score=1.0,
+    )
+    c2 = RetrievedChunk(
+        chunk_id="d1_c0002", document_id="d1", section="Methods", page="",
+        paragraph=2, text="second chunk", source_url="u", score=1.0,
+    )
+    # 第一次检索:gathered 为空,编号从 1 开始
+    text1 = _evidence_text(ctx, [c1])
+    assert "[1]" in text1
+    ctx.gathered.append(c1)
+    # 第二次检索:gathered 已有 1 条,编号从 2 开始(不重置)
+    text2 = _evidence_text(ctx, [c2])
+    assert "[2]" in text2
+    assert "[1]" not in text2
+
+
 # ---------------------------------------------------------------- 路由
 
 def test_router_direct_vs_agentic() -> None:

@@ -56,8 +56,8 @@ class SQLiteStore:
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False:Agent 工具在线程池中执行,需允许跨线程读;
         # 本项目同一时刻仅一个工具在跑(ThreadPoolExecutor max_workers=1),无并发写风险;
-        # 另加 _lock 兜底,Streamlit 多会话/上传入库并发写时串行化,防 SQLite 竞态。
-        self._lock = threading.Lock()
+        # 另加 RLock 兜底:Streamlit 多会话/上传入库并发读写时串行化,防 SQLite 竞态。
+        self._lock = threading.RLock()
         self._conn = sqlite3.connect(self._path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         with self._lock:
@@ -155,18 +155,20 @@ class SQLiteStore:
             self._conn.commit()
 
     def get_document(self, doc_id: str) -> dict[str, Any] | None:
-        row = self._conn.execute(
-            "SELECT * FROM documents WHERE document_id=?", (doc_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM documents WHERE document_id=?", (doc_id,)
+            ).fetchone()
         return dict(row) if row else None
 
     def list_documents(self, status: str | None = None) -> list[dict[str, Any]]:
-        if status:
-            rows = self._conn.execute(
-                "SELECT * FROM documents WHERE status=?", (status,)
-            ).fetchall()
-        else:
-            rows = self._conn.execute("SELECT * FROM documents").fetchall()
+        with self._lock:
+            if status:
+                rows = self._conn.execute(
+                    "SELECT * FROM documents WHERE status=?", (status,)
+                ).fetchall()
+            else:
+                rows = self._conn.execute("SELECT * FROM documents").fetchall()
         return [dict(r) for r in rows]
 
     def replace_chunks(self, chunks: list[Chunk]) -> None:
@@ -205,16 +207,26 @@ class SQLiteStore:
                 )
 
     def count_chunks(self, doc_id: str) -> int:
-        row = self._conn.execute(
-            "SELECT COUNT(*) AS n FROM chunks WHERE document_id=?", (doc_id,)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) AS n FROM chunks WHERE document_id=?", (doc_id,)
+            ).fetchone()
         return int(row["n"])
 
     def get_chunks(self, doc_id: str) -> list[dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT * FROM chunks WHERE document_id=? ORDER BY paragraph", (doc_id,)
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM chunks WHERE document_id=? ORDER BY paragraph", (doc_id,)
+            ).fetchall()
         return [dict(r) for r in rows]
+
+    def get_chunk(self, chunk_id: str) -> dict[str, Any] | None:
+        """按 chunk_id 单行查询(BM25 元数据补全用,避免整文档拉取)。"""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM chunks WHERE chunk_id=?", (chunk_id,)
+            ).fetchone()
+        return dict(row) if row else None
 
     def delete_document(self, doc_id: str) -> None:
         with self._lock:

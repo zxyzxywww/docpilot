@@ -79,6 +79,8 @@ class RerankClient:
         results: list[RerankResult] = []
         for item in data.get("results", []):
             idx = int(item["index"])
+            if idx < 0 or idx >= len(documents):
+                continue  # 防御:索引越界则跳过,避免 IndexError 与错位引用
             results.append(
                 RerankResult(index=idx, score=float(item["relevance_score"]), text=documents[idx])
             )
