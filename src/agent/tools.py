@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
+from itertools import count
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
@@ -31,18 +33,19 @@ class ToolContext:
     sqlite: SQLiteStore
     preprocessor: QueryPreprocessor
     gathered: dict[int, RetrievedChunk] = field(default_factory=dict)  # 证据编号 → chunk
-    citation_seq: int = 0  # 全局证据编号分配器(单调递增;超时迟到线程不会重复分配)
+    # 全局证据编号分配器:itertools.count 的 __next__ 在 CPython 中原子(GIL),
+    # 并发工具线程不会读到重复编号(超时迟到线程也不会破坏已分配编号)。
+    citation_seq: Iterator[int] = field(default_factory=lambda: count(1))
 
 
 def _assign_numbers(ctx: ToolContext, chunks: list[RetrievedChunk]) -> int:
     """为 chunks 分配全局递增编号并写入 gathered,返回起始编号。
 
-    编号分配与写入原子化(同一函数内完成):即使工具超时后线程在后台迟到
-    完成,也只是向 dict 追加已分配编号的条目,不影响主循环已分配的编号,
-    引用映射不会被破坏。
+    编号分配用 itertools.count(CPython C 级原子,并发安全),分配与写入在同一
+    函数内完成:即使工具超时后线程在后台迟到完成,也只是向 dict 追加已分配
+    编号的条目,不影响主循环已分配的编号,引用映射不会被破坏。
     """
-    start = ctx.citation_seq + 1
-    ctx.citation_seq += len(chunks)
+    start = next(ctx.citation_seq)
     for i, c in enumerate(chunks):
         ctx.gathered[start + i] = c
     return start
