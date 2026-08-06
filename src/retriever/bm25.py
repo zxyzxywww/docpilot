@@ -17,7 +17,6 @@ class BM25Retriever:
     def __init__(self, bm25: BM25Index, sqlite: SQLiteStore):
         self._bm25 = bm25
         self._sqlite = sqlite
-        self._chunk_cache: dict[str, dict] = {}
 
     def search(self, query: str, top_k: int) -> list[RetrievedChunk]:
         hits = self._bm25.search(query, top_k)
@@ -41,8 +40,10 @@ class BM25Retriever:
         return result
 
     def _chunk_meta(self, chunk_id: str) -> dict | None:
-        if chunk_id not in self._chunk_cache:
-            doc_id = chunk_id.rsplit("_c", 1)[0]
-            for row in self._sqlite.get_chunks(doc_id):
-                self._chunk_cache[row["chunk_id"]] = row
-        return self._chunk_cache.get(chunk_id)
+        # 不缓存元数据:SQLite 是事实来源,文档删除/重入库后直接读最新状态,
+        # 避免派生索引侧缓存陈旧(检索返回已删除内容)。
+        doc_id = chunk_id.rsplit("_c", 1)[0]
+        for row in self._sqlite.get_chunks(doc_id):
+            if row["chunk_id"] == chunk_id:
+                return row
+        return None

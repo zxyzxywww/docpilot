@@ -14,6 +14,7 @@ import json
 import math
 import re
 import sqlite3
+import threading
 import time
 import uuid
 from collections import Counter
@@ -54,10 +55,13 @@ class SQLiteStore:
         self._path = str(path)
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False:Agent 工具在线程池中执行,需允许跨线程读;
-        # 本项目中同一时刻仅一个工具在跑(ThreadPoolExecutor max_workers=1),无并发写风险。
+        # 本项目同一时刻仅一个工具在跑(ThreadPoolExecutor max_workers=1),无并发写风险;
+        # 另加 _lock 兜底,Streamlit 多会话/上传入库并发写时串行化,防 SQLite 竞态。
+        self._lock = threading.Lock()
         self._conn = sqlite3.connect(self._path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._init_schema()
+        with self._lock:
+            self._init_schema()
 
     def _init_schema(self) -> None:
         self._conn.executescript(
@@ -98,53 +102,57 @@ class SQLiteStore:
         self._conn.commit()
 
     def upsert_document(self, rec: dict[str, Any], status: str = "pending") -> None:
-        self._conn.execute(
-            """
-            INSERT INTO documents (
-                document_id, pmcid, title, authors, journal, doi, source_url, license,
-                publication_date, document_type, sha256, local_path, status, updated_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            ON CONFLICT(document_id) DO UPDATE SET
-                title=excluded.title, authors=excluded.authors, journal=excluded.journal,
-                doi=excluded.doi, source_url=excluded.source_url, license=excluded.license,
-                publication_date=excluded.publication_date, document_type=excluded.document_type,
-                sha256=excluded.sha256, local_path=excluded.local_path,
-                status=excluded.status, error=NULL, updated_at=excluded.updated_at
-            """,
-            (
-                rec["document_id"],
-                rec.get("pmcid", ""),
-                rec.get("title", ""),
-                json.dumps(rec.get("authors", []), ensure_ascii=False),
-                rec.get("journal", ""),
-                rec.get("doi", ""),
-                rec.get("source_url", ""),
-                rec.get("license", ""),
-                rec.get("publication_date", ""),
-                rec.get("document_type", ""),
-                rec.get("sha256", ""),
-                rec.get("local_path", ""),
-                status,
-                time.strftime("%Y-%m-%d %H:%M:%S"),
-            ),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO documents (
+                    document_id, pmcid, title, authors, journal, doi, source_url, license,
+                    publication_date, document_type, sha256, local_path, status, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(document_id) DO UPDATE SET
+                    title=excluded.title, authors=excluded.authors, journal=excluded.journal,
+                    doi=excluded.doi, source_url=excluded.source_url, license=excluded.license,
+                    publication_date=excluded.publication_date,
+                    document_type=excluded.document_type,
+                    sha256=excluded.sha256, local_path=excluded.local_path,
+                    status=excluded.status, error=NULL, updated_at=excluded.updated_at
+                """,
+                (
+                    rec["document_id"],
+                    rec.get("pmcid", ""),
+                    rec.get("title", ""),
+                    json.dumps(rec.get("authors", []), ensure_ascii=False),
+                    rec.get("journal", ""),
+                    rec.get("doi", ""),
+                    rec.get("source_url", ""),
+                    rec.get("license", ""),
+                    rec.get("publication_date", ""),
+                    rec.get("document_type", ""),
+                    rec.get("sha256", ""),
+                    rec.get("local_path", ""),
+                    status,
+                    time.strftime("%Y-%m-%d %H:%M:%S"),
+                ),
+            )
+            self._conn.commit()
 
     def set_status(self, doc_id: str, status: str, error: str | None = None) -> None:
         if status not in DOC_STATUS:
             raise ValueError(f"非法状态: {status}")
-        self._conn.execute(
-            "UPDATE documents SET status=?, error=?, updated_at=? WHERE document_id=?",
-            (status, error, time.strftime("%Y-%m-%d %H:%M:%S"), doc_id),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE documents SET status=?, error=?, updated_at=? WHERE document_id=?",
+                (status, error, time.strftime("%Y-%m-%d %H:%M:%S"), doc_id),
+            )
+            self._conn.commit()
 
     def set_embedding_meta(self, doc_id: str, model: str, dim: int) -> None:
-        self._conn.execute(
-            "UPDATE documents SET embedding_model=?, embedding_dim=? WHERE document_id=?",
-            (model, dim, doc_id),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE documents SET embedding_model=?, embedding_dim=? WHERE document_id=?",
+                (model, dim, doc_id),
+            )
+            self._conn.commit()
 
     def get_document(self, doc_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
@@ -166,33 +174,35 @@ class SQLiteStore:
         if not chunks:
             return
         doc_id = chunks[0].document_id
-        with self._conn:
-            self._conn.execute("DELETE FROM chunks WHERE document_id=?", (doc_id,))
-            self._conn.executemany(
-                """
-                INSERT INTO chunks (
-                    chunk_id, document_id, section, page, paragraph, text, source_url, token_count
-                )
-                VALUES (?,?,?,?,?,?,?,?)
-                """,
-                [
-                    (
-                        c.chunk_id,
-                        c.document_id,
-                        c.section,
-                        c.page,
-                        c.paragraph,
-                        c.text,
-                        c.source_url,
-                        c.token_count,
+        with self._lock:
+            with self._conn:
+                self._conn.execute("DELETE FROM chunks WHERE document_id=?", (doc_id,))
+                self._conn.executemany(
+                    """
+                    INSERT INTO chunks (
+                        chunk_id, document_id, section, page, paragraph, text, source_url,
+                        token_count
                     )
-                    for c in chunks
-                ],
-            )
-            self._conn.execute(
-                "UPDATE documents SET chunk_count=? WHERE document_id=?",
-                (len(chunks), doc_id),
-            )
+                    VALUES (?,?,?,?,?,?,?,?)
+                    """,
+                    [
+                        (
+                            c.chunk_id,
+                            c.document_id,
+                            c.section,
+                            c.page,
+                            c.paragraph,
+                            c.text,
+                            c.source_url,
+                            c.token_count,
+                        )
+                        for c in chunks
+                    ],
+                )
+                self._conn.execute(
+                    "UPDATE documents SET chunk_count=? WHERE document_id=?",
+                    (len(chunks), doc_id),
+                )
 
     def count_chunks(self, doc_id: str) -> int:
         row = self._conn.execute(
@@ -207,9 +217,10 @@ class SQLiteStore:
         return [dict(r) for r in rows]
 
     def delete_document(self, doc_id: str) -> None:
-        with self._conn:
-            self._conn.execute("DELETE FROM chunks WHERE document_id=?", (doc_id,))
-            self._conn.execute("DELETE FROM documents WHERE document_id=?", (doc_id,))
+        with self._lock:
+            with self._conn:
+                self._conn.execute("DELETE FROM chunks WHERE document_id=?", (doc_id,))
+                self._conn.execute("DELETE FROM documents WHERE document_id=?", (doc_id,))
 
     def all_ready_documents(self) -> list[dict[str, Any]]:
         return self.list_documents(status="ready")
@@ -501,8 +512,17 @@ class IngestService:
             raise RuntimeError(f"Qdrant 点数 {n_qdrant} != 期望 {expected}")
 
     def delete_document(self, doc_id: str) -> None:
+        """删除文档:先删 Qdrant 派生索引,成功后再物理删除 SQLite 记录。
+
+        Qdrant 删除失败时保留 SQLite 记录(deleted 状态 + error),不物理删除,
+        使状态机可观测、可重试。
+        """
         self.sqlite.set_status(doc_id, "deleted")
-        self.qdrant.delete_document(doc_id)
+        try:
+            self.qdrant.delete_document(doc_id)
+        except Exception as exc:  # noqa: BLE001 - 派生索引删除失败不吞异常
+            self.sqlite.set_status(doc_id, "deleted", error=f"qdrant 删除失败: {exc}")
+            raise
         self.sqlite.delete_document(doc_id)
         self.rebuild_bm25()
 

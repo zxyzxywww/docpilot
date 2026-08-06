@@ -32,6 +32,51 @@ def test_validate_upload_rejects_oversize() -> None:
         _validate_upload("big.pdf", (MAX_UPLOAD_MB + 1) * 1024 * 1024)
 
 
+def test_ingest_upload_rejects_path_traversal(monkeypatch) -> None:
+    """修复:文件名带路径分隔符必须拒绝(防目录穿越)。"""
+    from app.app import _ingest_upload
+
+    with pytest.raises(ValueError, match="非法文件名"):
+        _ingest_upload(NS(), "../evil.xml", b"<article/>")
+    with pytest.raises(ValueError, match="非法文件名"):
+        _ingest_upload(NS(), "..\\evil.xml", b"<article/>")
+
+
+def test_ingest_upload_doc_id_deterministic(monkeypatch) -> None:
+    """修复:同内容文件重复上传得到相同 doc_id(内容 sha256,幂等)。"""
+    from app.app import _ingest_upload
+
+    class FakeParsed:
+        title = "T"
+        paragraphs = [
+            {"section": "s", "page": "", "paragraph": 0, "text": "x",
+             "source_url": "", "chunk_id": "c1", "document_id": "d", "token_count": 1}
+        ]
+
+    class FakeXMLParser:
+        def parse(self, xml_bytes, doc_id, source_url=""):
+            return FakeParsed()
+
+    class FakeIngest:
+        def __init__(self, *a, **kw):
+            pass
+
+        def ingest_one(self, rec):
+            return {"ok": True}
+
+    monkeypatch.setattr("app.app.XMLParser", FakeXMLParser)
+    monkeypatch.setattr("ingest.IngestService", FakeIngest)
+    service = _service()
+    service.sqlite = NS(upsert_document=lambda rec, status=None: None)
+    service.qdrant = NS()
+    service.bm25 = NS()
+    service.config.chunking = NS(chunk_size_tokens=600, chunk_overlap_tokens=100)
+    d1 = _ingest_upload(service, "a.xml", b"same content bytes")
+    d2 = _ingest_upload(service, "b.xml", b"same content bytes")
+    assert d1 == d2
+    assert d1.startswith("upload_")
+
+
 # ---------------------------------------------------------------- 问答分发
 
 class FakePreprocessor:

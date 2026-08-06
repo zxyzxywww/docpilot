@@ -81,6 +81,7 @@ def answer_question(service: Service, question: str, mode: str = "auto") -> dict
             "citations": ans.citations,
             "refused": ans.stop_reason != "final_answer",
             "mode": mode,
+            "stop_reason": ans.stop_reason,
             "trace": {
                 "steps": ans.steps,
                 "stop_reason": ans.stop_reason,

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import tempfile
 from pathlib import Path
 
@@ -47,9 +48,15 @@ def _validate_upload(name: str, size: int) -> None:
 def _ingest_upload(service: Service, name: str, data: bytes) -> str:
     """解析上传文件并入库(XML 优先;PDF 扫描件明确报错)。"""
     suffix = Path(name).suffix.lower()
-    doc_id = f"upload_{abs(hash(name)) % 10**8:08d}"  # 上传文件确定性 ID(简化)
+    # 上传安全:只取 basename,拒绝路径分隔符(防目录穿越)
+    safe_name = Path(name).name
+    if not safe_name or safe_name != name or "/" in name or "\\" in name:
+        raise ValueError("非法文件名,禁止包含路径分隔符")
+    # 确定性 doc_id:基于内容哈希,重复上传幂等,重启后一致
+    raw_sha = hashlib.sha256(data).hexdigest()
+    doc_id = f"upload_{raw_sha[:12]}"
     with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / name
+        path = Path(tmp) / safe_name
         path.write_bytes(data)
         if suffix == ".xml":
             parsed = XMLParser().parse(path.read_bytes(), doc_id, source_url="")
@@ -74,7 +81,7 @@ def _ingest_upload(service: Service, name: str, data: bytes) -> str:
             "license": "",
             "publication_date": "",
             "document_type": "upload",
-            "sha256": "",
+            "sha256": raw_sha,
             "local_path": str(path),
         }
         service.sqlite.upsert_document(rec, status="pending")
@@ -96,7 +103,13 @@ def _ingest_upload(service: Service, name: str, data: bytes) -> str:
 def _render_answer(result: dict) -> None:
     st.markdown(result["answer"])
     if result["refused"]:
-        st.warning("证据不足,已拒答")
+        reason = str(result.get("stop_reason") or "")
+        msg = {
+            "max_steps": "达到步数上限,未能完成回答",
+            "cost_budget": "达到费用预算,已停止检索",
+            "repeat_action": "检测到重复动作,已停止",
+        }.get(reason, "证据不足,已拒答")
+        st.warning(msg)
     if result["mode"] == "agentic":
         st.caption("路径: agentic(ReAct Agent 多步检索)")
     with st.expander(f"引用溯源({len(result['citations'])} 条)"):

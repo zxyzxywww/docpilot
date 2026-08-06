@@ -206,6 +206,43 @@ def test_loop_invalid_params_reported(tmp_path: Path) -> None:
     assert answer.tool_trace[0]["ok"] is False  # Pydantic 拦截非法参数
 
 
+# ---------------------------------------------------------------- 引用溯源(修复:只保留被引用证据)
+
+def test_build_citations_only_keeps_referenced(tmp_path: Path) -> None:
+    """final answer 只引用 [2] 时,citations 只保留第 2 条证据(防罗列全部)。"""
+    ctx = _ctx(tmp_path)
+    ctx.gathered.extend(
+        [
+            RetrievedChunk(
+                chunk_id="d1_c0001", document_id="d1", section="Intro", page="",
+                paragraph=1, text="chunk one text", source_url="u1", score=1.0,
+            ),
+            RetrievedChunk(
+                chunk_id="d1_c0002", document_id="d1", section="Methods", page="",
+                paragraph=2, text="chunk two text", source_url="u1", score=1.0,
+            ),
+        ]
+    )
+    loop = AgentLoop(FakeChat([]), ctx, _cfg(), ConversationMemory())  # type: ignore[arg-type]
+    citations = loop._build_citations("综合 [2] 的证据,扩散模型更优。")
+    assert len(citations) == 1
+    assert citations[0].chunk_id == "d1_c0002"
+    assert citations[0].index == 2
+
+
+def test_build_citations_drops_out_of_range(tmp_path: Path) -> None:
+    """模型编造不存在的编号 [5] 应被丢弃(防幻觉)。"""
+    ctx = _ctx(tmp_path)
+    ctx.gathered.append(
+        RetrievedChunk(
+            chunk_id="d1_c0001", document_id="d1", section="Intro", page="",
+            paragraph=1, text="t", source_url="u", score=1.0,
+        )
+    )
+    loop = AgentLoop(FakeChat([]), ctx, _cfg(), ConversationMemory())  # type: ignore[arg-type]
+    assert loop._build_citations("编造的编号 [5] 应被丢弃。") == []
+
+
 # ---------------------------------------------------------------- 路由
 
 def test_router_direct_vs_agentic() -> None:
