@@ -60,7 +60,7 @@ chunking:
 database:
   sqlite_path: "data/db/medidoc.db"     # 唯一事实来源(文档/chunk 元数据/导入状态)
   qdrant:
-    mode: "local"                       # local(开发) | docker(部署)
+    mode: "docker"                      # local(开发) | docker(部署)
     path: "data/db/qdrant"              # local mode 持久化目录(可重建派生索引)
     collection: "medidoc_chunks"
     docker_url: "http://localhost:6333"

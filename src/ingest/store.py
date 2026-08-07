@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sqlite3
 import threading
@@ -259,7 +260,10 @@ class QdrantStore:
             Path(config.path).mkdir(parents=True, exist_ok=True)
             self._client = QdrantClient(path=config.path)
         elif config.mode == "docker":
-            self._client = QdrantClient(url=config.docker_url)
+            # QDRANT_URL 环境变量优先(容器内指向 compose 服务名 qdrant:6333);
+            # 本机 reindex 未设该变量时回退 config.docker_url(localhost:6333)。
+            url = os.environ.get("QDRANT_URL", config.docker_url)
+            self._client = QdrantClient(url=url)
         else:
             raise ValueError(f"未知 Qdrant mode: {config.mode}")
         self._ensure_collection()
