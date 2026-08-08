@@ -29,7 +29,9 @@ import streamlit as st  # noqa: E402
 from ingest import PDFParser, XMLParser  # noqa: E402
 from ingest.parser import ScannedPDFError  # noqa: E402
 
-from .service import Service, answer_question, build_service  # noqa: E402
+# streamlit run 把 app.py 作为顶层脚本执行(__package__ 为 None),
+# 相对导入 .service 会失败,必须用绝对导入(app 是 src/ 下的包)。
+from app.service import Service, answer_question, build_service  # noqa: E402
 
 # 上传安全限制(约束 8)
 ALLOWED_SUFFIXES = {".xml", ".pdf"}
