@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from ingest import BM25Index, QdrantStore, SQLiteStore
-from llm import ChatClient, EmbeddingClient, RerankClient, get_api_key, load_config
-from llm.config import AppConfig
-from rag import DirectRAG
-from retriever import BM25Retriever, DenseRetriever, RetrieverPipeline
-from retriever.query_prep import QueryPreprocessor
+# 独立运行(如 docker exec 直接 import)时也保证 src/ 可解析
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT / "src"))
+
+from ingest import BM25Index, QdrantStore, SQLiteStore  # noqa: E402
+from llm import ChatClient, EmbeddingClient, RerankClient, get_api_key, load_config  # noqa: E402
+from llm.config import AppConfig  # noqa: E402
+from rag import DirectRAG  # noqa: E402
+from retriever import BM25Retriever, DenseRetriever, RetrieverPipeline  # noqa: E402
+from retriever.query_prep import QueryPreprocessor  # noqa: E402
 
 
 @dataclass

@@ -13,15 +13,23 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 import tempfile
 from pathlib import Path
 
-import streamlit as st
+# Streamlit 以 `streamlit run src/app/app.py` 启动时不会自动把 src/ 加入
+# sys.path,这里显式注入,保证 `from ingest import ...` 可解析
+# (脚本位于 src/app/,项目根为其 parents[2])。
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(_PROJECT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
-from ingest import PDFParser, XMLParser
-from ingest.parser import ScannedPDFError
+import streamlit as st  # noqa: E402
 
-from .service import Service, answer_question, build_service
+from ingest import PDFParser, XMLParser  # noqa: E402
+from ingest.parser import ScannedPDFError  # noqa: E402
+
+from .service import Service, answer_question, build_service  # noqa: E402
 
 # 上传安全限制(约束 8)
 ALLOWED_SUFFIXES = {".xml", ".pdf"}
@@ -133,6 +141,8 @@ def main() -> None:
         st.header("设置")
         mode = st.radio("问答模式", ["auto", "direct", "agentic"], index=0,
                         help="auto 按问题复杂度自动选择;agentic 适合比较/综合类问题")
+        if mode is None:  # st.radio 有默认值,实际不会返回 None;此处仅收窄类型
+            mode = "auto"
         st.divider()
         st.subheader("文献库")
         docs = service.sqlite.all_ready_documents()
