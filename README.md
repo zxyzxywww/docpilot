@@ -107,11 +107,11 @@ python scripts/chat.py
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | 一 | 脚手架 + 双供应商接入 + MVP 红线 + 质量基线 | ✅ 已完成(已验收) |
-| 二 | 数据管道:manifest 合规 + 解析 + SQLite/Qdrant/BM25 入库 + reindex.py | 🔄 进行中(待人工验收) |
-| 三 | 双通道检索 + direct_rag + 观测日志 + 注入防护 | ⬜ 未开始 |
-| 四 | 手写 ReAct Agent + agentic_rag + 护栏 | ⬜ 未开始 |
+| 二 | 数据管道:manifest 合规 + 解析 + SQLite/Qdrant/BM25 入库 + reindex.py | ✅ 已完成(已验收) |
+| 三 | 双通道检索 + direct_rag + 观测日志 + 注入防护 | ✅ 已完成(已验收) |
+| 四 | 手写 ReAct Agent + agentic_rag + 护栏 | ✅ 已完成(已验收) |
 | 五 | 评估体系 + direct/agentic 对比 + 调参 | ✅ 已完成(已验收) |
-| 六 | Streamlit UI + Docker 部署 + 收尾 | 🔄 进行中(待人工验收) |
+| 六 | Streamlit UI + Docker 部署 + 收尾 | ✅ 已完成(已验收,含 Docker 实机部署验证) |
 
 每阶段完成:更新本 README → 输出 Git diff 摘要 → **人工验收通过后**才进入下一阶段。
 
@@ -295,22 +295,36 @@ streamlit run src/app/app.py
 功能:中英文问答(auto/direct/agentic 三模式)、**引用点击溯源**(展开查看证据原文)、
 上传文献入库(仅 XML/PDF,≤20MB,路径清洗,扫描 PDF 明确报错)。
 
-### Docker 部署(本地一键启动)
+### Docker 部署(本地一键启动,已实机验证)
 
-> 本机未装 Docker 时跳过;有 Docker 的机器照此操作。
+> 已在 Windows + Docker Desktop 实机验证通过(2026-08)。
 
 ```bash
-# 1. 部署前把 config.yaml 的 qdrant.mode 改为 docker
-# 2. 重建派生索引(local → docker 不复用本地目录,按 SQLite 确定性重建)
+# 0. 国内网络首次拉镜像慢:已配置镜像加速器 docker.m.daocloud.io(~/.docker/daemon.json)
+# 1. 部署前把 config.yaml 的 qdrant.mode 改为 docker(docker_url 默认 localhost:6333)
+# 2. 启动 Qdrant 容器并等待 healthy
+docker compose up -d qdrant
+# 3. 重建派生索引(local → docker 不复用本地目录,按 SQLite 确定性重建;连 localhost:6333)
 python scripts/reindex.py
-# 3. 启动(API key 走环境变量,不写入镜像)
+# 4. 构建并启动应用(API key 走环境变量,不写入镜像)
 export DEEPSEEK_API_KEY=sk-xxx
 export SILICONFLOW_API_KEY=sk-xxx
-docker compose up --build
-# 浏览器打开 http://localhost:8501
+docker compose up --build -d
+# 5. 浏览器打开 http://localhost:8501;验证:curl http://localhost:8501/_stcore/health
 ```
+
+部署要点(实机验证踩坑记录):
 
 - 镜像**不含模型权重**(纯 API 方案),CPU 即可运行;
 - Qdrant 以独立容器运行,`./data` 挂载宿主机持久化(SQLite 事实来源);
-- key 仅通过环境变量注入,`.env` 与 `data/` 均被 `.dockerignore` 排除。
+- key 仅通过环境变量注入,`.env` 与 `data/` 均被 `.dockerignore` 排除;
+- **端口映射**:qdrant 服务 `ports: "6333:6333"` —— 本机 reindex.py 与 config 的
+  `docker_url` 都走 localhost:6333;应用容器内则由 `QDRANT_URL=http://qdrant:6333`
+  环境变量覆盖(QdrantStore 优先读该变量,未设置时回退 config.docker_url);
+- **healthcheck**:qdrant 镜像没有 curl/wget 且默认 sh 不支持 `/dev/tcp`,
+  已用 `bash -c` + `/dev/tcp` 发送 HTTP GET 检查(容器内验证返回 200);
+- qdrant-client(1.19)与 qdrant server(1.12.4)存在 minor 版本差警告,
+  功能正常;想消除可将镜像升级到 `qdrant/qdrant:v1.13+`;
+- 回本地开发模式:`config.yaml` 的 `qdrant.mode` 改回 `local` 即可
+  (本地索引目录 `data/db/qdrant` 保留)。
 
