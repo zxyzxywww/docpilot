@@ -46,14 +46,18 @@ medidoc/
 │   ├── llm/             # DeepSeek 对话 + SiliconFlow embedding/rerank 客户端
 │   ├── ingest/          # (阶段二)数据管道
 │   ├── retriever/       # (阶段三)双通道检索
+│   ├── rag/             # (阶段三)direct_rag 生成层
 │   ├── agent/           # (阶段四)ReAct Agent
 │   ├── evaluator/       # (阶段五)评估体系
-│   └── app/             # (阶段六)Streamlit Web 界面
+│   └── obs/             # 观测日志
+├── server/              # (阶段六)FastAPI 后端(前后端分离)
+├── web/                 # (阶段六)Next.js 前端(Chat/KB/Evaluation)
 ├── data/
 │   ├── raw/             # 原始文献 + manifest.jsonl(合规清单,raw 不入库)
-│   └── db/              # SQLite + Qdrant 持久化(不入 git,可重建)
+│   ├── db/              # SQLite + Qdrant 持久化(不入 git,可重建)
+│   └── eval/            # 评估集与评估报告(eval_report.json)
 ├── tests/               # 默认离线 mock,不调用真实 API
-└── scripts/             # chat / ingest / query / evaluate 等 CLI
+└── scripts/             # fetch / ingest / query / evaluate / eval_report 等 CLI
 ```
 
 ## 快速开始
@@ -134,7 +138,7 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 | 三 | 双通道检索 + direct_rag + 观测日志 + 注入防护 | ✅ 已完成(已验收) |
 | 四 | 手写 ReAct Agent + agentic_rag + 护栏 | ✅ 已完成(已验收) |
 | 五 | 评估体系 + direct/agentic 对比 + 调参 | ✅ 已完成(已验收) |
-| 六 | Streamlit UI + Docker 部署 + 收尾 | ✅ 已完成(已验收,含 Docker 实机部署验证) |
+| 六 | 前端产品化(Next.js 三页)+ API 层 + Docker 三服务交付 | ✅ 已完成(已验收,实机验证) |
 
 每阶段完成:更新本 README → 输出 Git diff 摘要 → **人工验收通过后**才进入下一阶段。
 
@@ -175,7 +179,7 @@ MediDoc 仅用于公开医学文献的检索与研究辅助,输出不构成医�
 - **全链路手写**:双通道检索(手写 BM25 + bge-m3 向量)、RRF 融合、ReAct Agent
   循环均不依赖 LangChain,可被面试深挖;
 - **工程闭环**:SQLite 事实来源 + Qdrant/BM25 可重建索引、导入状态机、观测日志、
-  提示注入防护、证据不足拒答、Streamlit UI + Docker 交付(纯 API、CPU 可跑);
+  提示注入防护、证据不足拒答;前端产品化(Next.js:Chat/KB/Evaluation 三页)+ FastAPI 层 + Docker 三服务交付(纯 API、CPU 可跑);
 - **量化评估**:40 条固定测试集(20% 无答案),调参将引用准确率 0.63→0.77、
   MRR 0.85→0.90;direct/agentic 成本对比(0.005 vs 0.017 元/问)验证路由设计;
 - **成本友好**:纯 API 方案,单问成本约 0.005 元,全项目开发期花费约 1 元。
@@ -306,21 +310,27 @@ python scripts/evaluate.py --split test --judge    # 附加 LLM-as-judge
 python scripts/evaluate.py --compare-agentic       # direct vs agentic 对比
 ```
 
-## Web 界面与部署(阶段六)
+## Web 界面与部署(阶段六,前后端分离架构)
 
-### Streamlit 本地运行
+架构:浏览器 → `web/`(Next.js 前端,端口 3000)→ `server/`(FastAPI,端口 8000)
+→ RAG 核心(src/)→ Qdrant/SQLite。Streamlit 已移除(2026-09 前端产品化改造)。
+
+### 本地开发(两个终端)
 
 ```bash
-streamlit run src/app/app.py
-# 浏览器打开 http://localhost:8501
+# 终端 1:后端 API(项目根)
+python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
+# 终端 2:前端(web/ 目录)
+npm run dev   # 打开 http://localhost:3000
 ```
 
-功能:中英文问答(auto/direct/agentic 三模式)、**引用点击溯源**(展开查看证据原文)、
-上传文献入库(仅 XML/PDF,≤20MB,路径清洗,扫描 PDF 明确报错)。
+功能:Chat 页(会话列表 / Markdown 回答 + 引用卡片溯源 / 右侧 RAG 执行链路 6 步)、
+Knowledge Base 页(文档管理 + 上传 XML/PDF ≤20MB + 配置展示)、Evaluation 页
+(指标卡 + 调参前后对比)。后端交互文档 http://localhost:8000/docs。
 
 ### Docker 部署(本地一键启动,已实机验证)
 
-> 已在 Windows + Docker Desktop 实机验证通过(2026-08)。
+> 已在 Windows + Docker Desktop 实机验证通过(2026-09,三服务 qdrant + api + web)。
 
 ```bash
 # 0. 国内网络首次拉镜像慢:已配置镜像加速器 docker.m.daocloud.io(~/.docker/daemon.json)
@@ -329,11 +339,10 @@ streamlit run src/app/app.py
 docker compose up -d qdrant
 # 3. 重建派生索引(local → docker 不复用本地目录,按 SQLite 确定性重建;连 localhost:6333)
 python scripts/reindex.py
-# 4. 构建并启动应用(API key 走环境变量,不写入镜像)
-export DEEPSEEK_API_KEY=sk-xxx
-export SILICONFLOW_API_KEY=sk-xxx
+# 4. 构建并启动全部服务(API key 走环境变量或 .env,不写入镜像)
 docker compose up --build -d
-# 5. 浏览器打开 http://localhost:8501;验证:curl http://localhost:8501/_stcore/health
+# 5. 浏览器打开 http://localhost:3000;验证:curl http://localhost:3000/_stcore/health 无此接口,
+#    用 curl http://localhost:8000/api/health 验证后端
 ```
 
 部署要点(实机验证踩坑记录):
