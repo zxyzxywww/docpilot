@@ -1,5 +1,8 @@
 # DocPilot —— Python 后端开发文档问答 Agent
 
+> **2026-09 数据域迁移**:当前语料为 Python 后端官方开发文档(FastAPI/Pydantic/SQLAlchemy/Python,97 页 / 12170 chunks,web 入库)。
+> 早期"医学文献(MR-to-CT)"内容属项目演进历史,见 git 历史与旧章节;量化评估为 DocPilot 开发文档首轮基线。
+
 > 仅用于**公开医学文献检索与研究辅助**,不提供任何诊断、治疗或医疗决策建议。
 > 本项目是学习与简历项目,所有医学结论均须有真实检索证据与引用。
 
@@ -163,7 +166,7 @@ scripts/ingest.py(入库)/ scripts/reindex.py(重建派生索引)
 
 - **SQLite 是唯一事实来源**,Qdrant 与 BM25 均为可重建派生索引(`reindex.py` 按 SQLite + manifest + 原始文档确定性重建)
 - 更换 embedding 模型 / 维度 / 分块策略 → 必须重建索引(维度不匹配时 QdrantStore 直接报错)
-- 当前语料:5 篇 MR-to-CT 模态合成主题顶刊 OA 文献(Medical Physics×2 / Magnetic Resonance in Medicine / Phys Med Biol / NeuroImage: Clinical),265 chunks
+当前语料:Python 后端官方开发文档(FastAPI 50 / Pydantic 12 / SQLAlchemy 16 / Python 20,97 页 / 12170 chunks)
 
 ## 免责声明
 
@@ -173,7 +176,7 @@ MediDoc 仅用于公开医学文献的检索与研究辅助,输出不构成医�
 
 > 详细简历素材见 `resume.md`,手写练习见 `docs/手写练习清单.md`。
 
-**MediDoc** 是一个垂直领域 RAG + Agent 应用:基于 35 篇 MR-to-CT 模态合成顶刊
+**MediDoc** 是一个垂直领域 RAG + Agent 应用:基于 97 页 Python 后端官方开发文档
 文献,支持中英文提问、带引用溯源回答、工具调用式多步检索。核心亮点:
 
 - **全链路手写**:双通道检索(手写 BM25 + bge-m3 向量)、RRF 融合、ReAct Agent
@@ -227,7 +230,7 @@ MediDoc 仅用于公开医学文献的检索与研究辅助,输出不构成医�
 ## 问答用法(阶段三)
 
 ```bash
-python scripts/query.py "磁共振到CT图像合成一般用什么深度学习方法?"
+python scripts/query.py "FastAPI 怎么给接口加 OAuth2 密码流认证?"
 python scripts/query.py --verbose "问题"   # 显示完整引用与观测详情
 ```
 
