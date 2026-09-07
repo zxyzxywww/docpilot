@@ -48,7 +48,7 @@ ReAct Agent(自研)· Streamlit · Docker Compose · pytest / ruff / mypy · Git
 | 引用完整率 | 100% | 回答全部带可溯源引用 |
 | 无证据拒答 | 库外事实型 100% 拒答 | 语义沾边型为已知难点(如实披露) |
 | 单次成本 | 0.005–0.017 元/问 | direct 0.005 / agentic 0.017 |
-| 工程质量 | 81 个离线测试、ruff/mypy 零告警、CI 自动测试 | 全离线 mock,不依赖付费 API |
+| 工程质量 | 91 个离线测试(含 12 个 API/会话测试)、ruff/mypy 零告警、CI 自动测试 | 全离线 mock,不依赖付费 API |
 
 ---
 
