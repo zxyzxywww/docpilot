@@ -26,7 +26,7 @@ if errorlevel 1 (
     )
 )
 
-echo [2/3] Starting containers (Qdrant + MediDoc app)...
+echo [2/3] Starting containers (Qdrant + API + Web)...
 docker compose up -d
 if errorlevel 1 (
     echo [!] Container startup failed. Check docker compose config.
@@ -36,11 +36,11 @@ if errorlevel 1 (
 
 echo [3/3] Waiting for app, opening browser...
 timeout /t 12 /nobreak >nul
-start "" http://localhost:8501
+start "" http://localhost:3000
 
 echo.
 echo ==========================================
-echo   [OK] App started:  http://localhost:8501
+echo   [OK] App started:  http://localhost:3000
 echo.
 echo   Stop service:  docker compose down
 echo   Check status:  docker compose ps

@@ -1,12 +1,10 @@
-# MediDoc 部署编排:Qdrant 容器 + Streamlit 应用
-# 用法(在项目根目录):
-#   export DEEPSEEK_API_KEY=sk-xxx
-#   export SILICONFLOW_API_KEY=sk-xxx
-#   docker compose up --build
+# MediDoc 部署编排:Qdrant + API(server)+ Web(web/)
+# 用法(在项目根目录,key 从 .env 自动读取):
+#   docker compose up --build -d
+# 访问:http://localhost:3000(交互文档 http://localhost:8000/docs)
 #
-# 部署前:config.yaml 中 qdrant.mode 改为 docker(docker_url 默认 localhost:6333),
-# 然后执行 python scripts/reindex.py 从 SQLite 事实来源重建 Qdrant/BM25
-# (local → docker 切换不复用本地存储目录,约束 3)。
+# 部署前:config.yaml 中 qdrant.mode 改为 docker,
+# 然后执行 python scripts/reindex.py 重建 Qdrant(约束 3)。
 services:
   qdrant:
     image: qdrant/qdrant:v1.12.4
@@ -22,20 +20,32 @@ services:
       timeout: 5s
       retries: 5
 
-  medidoc:
+  api:
     build: .
     ports:
-      - "8501:8501"
+      - "8000:8000"
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
       - QDRANT_URL=http://qdrant:6333
     volumes:
-      # 事实来源(SQLite)与原始文献挂载到宿主机,持久化
+      # 事实来源(SQLite)与原始文献挂载到宿主机,持久化;config 同步宿主配置
       - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
     depends_on:
       qdrant:
         condition: service_healthy
+
+  web:
+    build:
+      context: ./web
+      args:
+        # 浏览器访问的是宿主端口,因此固定指向宿主 8000
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
 
 volumes:
   qdrant_storage:
