@@ -27,6 +27,8 @@ from evaluator.metrics import (  # noqa: E402
 EVAL_DIR = PROJECT_ROOT / "data" / "eval"
 
 # 阶段五调参记录(README 量化表;来源 scripts/evaluate.py --split dev 两轮)
+COMPARISON: dict = {}  # 两轮调参对比数据(本轮 DocPilot 基线记录后补充)
+
 BASELINE = {
     "Recall@5": 0.9545,
     "MRR": 0.8500,
@@ -42,9 +44,10 @@ TUNED = {
     "refusal_rate": 0.50,
 }
 TUNING_NOTES = (
-    "引入证据相关性预检(config.rag.min_relevance_score=0.3:rerank 分数低于阈值直接拒答)"
-    " + 精简检索上下文,将引用准确率从 0.63 提升至 0.77、MRR 从 0.85 提升至 0.90;"
-    "语义沾边型库外问题仍是拒答难点(README 如实记录)。"
+    "DocPilot 首轮 test 基线(final_context_k=6):MRR 0.624 / Recall@5 0.727 / 引用完整率 0.955。"
+    "调参实验:final_context_k 6→8 复跑后 MRR 0.599、引用准确率 0.363 均下降,已回滚至 6"
+    "(代码块多、信息碎片化的文档域中,更多上下文引入噪音);"
+    "无答案拒答 0.375:语义沾边型库外问题仍为已知难点。"
 )
 
 
@@ -69,7 +72,7 @@ def main() -> int:
             if (EVAL_DIR / "predictions_test.jsonl").exists()
             else "predictions_dev.jsonl"
         ),
-        "comparison": {"baseline": BASELINE, "tuned": TUNED},
+        "comparison": COMPARISON,
         "tuning_notes": TUNING_NOTES,
     }
     if not preds:

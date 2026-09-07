@@ -1,23 +1,8 @@
 {
-  "generated_at": "2026-09-07 23:34:37",
+  "generated_at": "2026-09-08 01:14:28",
   "source": "predictions_test.jsonl",
-  "comparison": {
-    "baseline": {
-      "Recall@5": 0.9545,
-      "MRR": 0.85,
-      "nDCG@10": 0.8866,
-      "citation_accuracy": 0.63,
-      "refusal_rate": 0.5
-    },
-    "tuned": {
-      "Recall@5": 0.9545,
-      "MRR": 0.903,
-      "nDCG@10": 0.9261,
-      "citation_accuracy": 0.77,
-      "refusal_rate": 0.5
-    }
-  },
-  "tuning_notes": "引入证据相关性预检(config.rag.min_relevance_score=0.3:rerank 分数低于阈值直接拒答) + 精简检索上下文,将引用准确率从 0.63 提升至 0.77、MRR 从 0.85 提升至 0.90;语义沾边型库外问题仍是拒答难点(README 如实记录)。",
+  "comparison": {},
+  "tuning_notes": "DocPilot 首轮 test 基线(final_context_k=6):MRR 0.624 / Recall@5 0.727 / 引用完整率 0.955。调参实验:final_context_k 6→8 复跑后 MRR 0.599、引用准确率 0.363 均下降,已回滚至 6(代码块多、信息碎片化的文档域中,更多上下文引入噪音);无答案拒答 0.375:语义沾边型库外问题仍为已知难点。",
   "available_current": true,
   "dataset": {
     "size": 30,
@@ -25,15 +10,15 @@
     "unanswerable_ratio": 0.267
   },
   "current": {
-    "Recall@5": 0.9545,
-    "Recall@10": 1.0,
-    "MRR": 0.903,
-    "nDCG@10": 0.9261,
-    "unanswerable_refusal_rate": 0.5,
-    "answerable_answer_rate": 1.0,
-    "citation_rate": 1.0,
-    "总费用(元)": 0.1721,
-    "平均费用(元/问)": 0.005737,
-    "平均延迟(秒)": 8.9
+    "Recall@5": 0.7273,
+    "Recall@10": 0.8182,
+    "MRR": 0.6244,
+    "nDCG@10": 0.6714,
+    "unanswerable_refusal_rate": 0.375,
+    "answerable_answer_rate": 0.9545,
+    "citation_rate": 0.9545,
+    "总费用(元)": 0.1373,
+    "平均费用(元/问)": 0.004575,
+    "平均延迟(秒)": 6.83
   }
 }
