@@ -26,7 +26,7 @@ from typing import Any
 from qdrant_client import QdrantClient, models
 
 from .chunker import Chunk
-from .parser import ParsedDocument, ParseError, PDFParser, XMLParser
+from .parser import HTMLDocParser, ParsedDocument, ParseError, PDFParser, XMLParser
 
 DOC_STATUS = ("pending", "indexing", "ready", "failed", "deleted")
 
@@ -244,6 +244,13 @@ class SQLiteStore:
             return None, None
         return doc.get("embedding_model"), doc.get("embedding_dim")
 
+    def wipe(self) -> None:
+        """清空全部文档与 chunk(重建语料前调用;仅事实来源侧清理)。"""
+        with self._lock:
+            with self._conn:
+                self._conn.execute("DELETE FROM chunks")
+                self._conn.execute("DELETE FROM documents")
+
     def close(self) -> None:
         self._conn.close()
 
@@ -311,6 +318,12 @@ class QdrantStore:
             for c, v in zip(chunks, vectors, strict=True)
         ]
         self._client.upsert(self._collection, points=points)
+
+    def clear(self) -> None:
+        """删除并重建空集合(清空派生索引用)。"""
+        if self._client.collection_exists(self._collection):
+            self._client.delete_collection(self._collection)
+        self._ensure_collection()
 
     def query(self, vector: list[float], top_k: int) -> list[dict[str, Any]]:
         """向量查询:返回 top_k 个点的 payload(按相似度降序)。"""
@@ -458,6 +471,7 @@ class IngestService:
         self._chunk_overlap = chunk_overlap_tokens
         self._xml_parser = XMLParser()
         self._pdf_parser = PDFParser()
+        self._html_parser = HTMLDocParser()
 
     def ingest_manifest(
         self, manifest_recs: list[dict[str, Any]], only_ids: set[str] | None = None
@@ -506,7 +520,9 @@ class IngestService:
             return self._xml_parser.parse(path.read_bytes(), doc_id, source_url)
         if path.suffix.lower() == ".pdf":
             return self._pdf_parser.parse(str(path), doc_id, source_url)
-        raise ParseError(f"不支持的文档类型: {path.suffix}(仅支持 .xml / .pdf)")
+        if path.suffix.lower() in (".html", ".htm"):
+            return self._html_parser.parse(path.read_bytes(), doc_id, source_url)
+        raise ParseError(f"不支持的文档类型: {path.suffix}(仅支持 .xml / .pdf / .html)")
 
     def _chunk(self, rec: dict[str, Any], parsed: ParsedDocument) -> list[Chunk]:
         from .chunker import chunk_paragraphs

@@ -2,17 +2,18 @@
 
 from .chunker import Chunk, chunk_paragraphs
 from .parser import (
+    HTMLDocParser,
+    PDFParser,
+    ParseError,
     ParsedDocument,
     ParsedParagraph,
-    ParseError,
-    PDFParser,
     ScannedPDFError,
     XMLParser,
 )
 from .store import (
-    DOC_STATUS,
     BM25Hit,
     BM25Index,
+    DOC_STATUS,
     IndexRebuildRequiredError,
     IngestService,
     QdrantStore,
@@ -24,12 +25,13 @@ __all__ = [
     "BM25Index",
     "Chunk",
     "DOC_STATUS",
+    "HTMLDocParser",
     "IndexRebuildRequiredError",
     "IngestService",
+    "PDFParser",
     "ParseError",
     "ParsedDocument",
     "ParsedParagraph",
-    "PDFParser",
     "QdrantStore",
     "ScannedPDFError",
     "SQLiteStore",

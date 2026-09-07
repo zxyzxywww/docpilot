@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from html.parser import HTMLParser
 
 from pypdf import PdfReader
 
@@ -178,3 +179,173 @@ class PDFParser:
 def _join_text_keep_spaces(text: str) -> str:
     """PDF 文本按原样保留,压缩多余空白。"""
     return " ".join(text.split())
+
+
+# ---------------------------------------------------------------- HTML 解析
+
+_HTML_SKIP_TAGS = {
+    "script", "style", "nav", "header", "footer", "noscript",
+    "svg", "form", "aside", "iframe",
+}
+
+
+class _HTMLDocHandler(HTMLParser):
+    """基于 html.parser 的文档正文提取状态机。
+
+    规则:
+    - 跳过导航/脚本/样式等(SKIP 子树不产生内容);
+    - 正文容器定位:<article> / <main> / <div class 含 md-content 或 body>;
+    - <h1> 作为页面标题;<h2..h6> 维护章节路径(section);
+    - <p> 与 <li> 各成一段;<pre>/<code> 作为独立"代码段落"(代码块感知:
+      与正文分开,保留完整可运行示例,不做 OCR/混切);
+    - paragraph 序号跨全文递增。
+    """
+
+    def __init__(self, document_id: str, source_url: str = ""):
+        super().__init__(convert_charrefs=True)
+        self.document_id = document_id
+        self.source_url = source_url
+        self.title = ""
+        self.paragraphs: list[ParsedParagraph] = []
+
+        self._stack: list[str] = []
+        self._skip_depth = 0
+        self._in_content = False
+        self._content_depth = -1
+        self._title_done = False
+        self._path: list[str] = []
+        self._block: str | None = None  # p | pre | li
+        self._heading: int | None = None  # h1..h6
+        self._buf: list[str] = []
+        self._counter = 0
+
+    # ------------------------------------------------------------ 标签事件
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._stack.append(tag)
+        if tag in _HTML_SKIP_TAGS:
+            self._skip_depth += 1
+            return
+        if self._skip_depth:
+            return
+        if not self._in_content and self._is_content_start(tag, attrs):
+            self._in_content = True
+            self._content_depth = len(self._stack)
+            return
+        if not self._in_content:
+            return
+        if tag in ("p", "li", "pre", "h1", "h2", "h3", "h4", "h5", "h6"):
+            self._flush()
+            if tag == "pre":
+                self._block = "pre"
+            elif tag in ("p", "li"):
+                self._block = tag
+            else:
+                self._heading = int(tag[1])
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        # <br/>、<hr/> 等自闭合不影响块结构
+        pass
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _HTML_SKIP_TAGS:
+            if self._skip_depth:
+                self._skip_depth -= 1
+            self._stack.pop()
+            return
+        if self._skip_depth:
+            self._stack.pop()
+            return
+        # 内容区结束(离开 content 根)
+        if self._in_content and len(self._stack) == self._content_depth and tag != "html":
+            self._flush()
+            self._in_content = False
+        self._stack.pop()
+        if not self._in_content:
+            return
+        if tag == "p" or (tag == "pre" and self._block == "pre") or (
+            tag == "li" and self._block == "li"
+        ):
+            self._flush()
+        elif tag in ("h1", "h2", "h3", "h4", "h5", "h6") and self._heading == int(tag[1]):
+            self._close_heading(int(tag[1]))
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth or not self._in_content:
+            return
+        if self._block is not None or self._heading is not None:
+            self._buf.append(data)
+
+    # ------------------------------------------------------------ 内部
+
+    def _is_content_start(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
+        if tag == "article" or tag == "main":
+            return True
+        if tag == "div":
+            cls = dict(attrs).get("class") or ""
+            return "md-content" in cls or cls.strip() == "body"
+        return False
+
+    def _flush(self) -> None:
+        text = "".join(self._buf)
+        self._buf = []
+        if self._block:
+            self._block = None
+        if self._heading:
+            self._heading = None
+        text = text.replace("¶", "").strip()
+        if not text:
+            return
+        self._counter += 1
+        self.paragraphs.append(
+            ParsedParagraph(
+                document_id=self.document_id,
+                section=" / ".join(self._path),
+                paragraph=self._counter,
+                text=text,
+                page="",
+                source_url=self.source_url,
+            )
+        )
+
+    def _close_heading(self, level: int) -> None:
+        text = "".join(self._buf)
+        self._buf = []
+        self._heading = None
+        text = text.replace("¶", "").strip()
+        if not text:
+            return
+        if level == 1:
+            if not self._title_done:
+                self.title = text
+                self._title_done = True
+            else:
+                # 后续 h1:作为新章节根,清空路径
+                self._path = []
+            return
+        # h2..h6 维护 outline;h(n) 对应路径下标 n-2
+        idx = level - 2
+        if idx <= 0:
+            self._path = [text]
+        elif len(self._path) >= idx:
+            self._path[idx - 1] = text
+            del self._path[idx:]
+        else:
+            self._path.append(text)
+
+
+class HTMLDocParser:
+    """HTML 文档解析(开发者官方文档正文 → 段落 + 代码块)。"""
+
+    def parse(self, html_bytes: bytes, document_id: str, source_url: str = "") -> ParsedDocument:
+        handler = _HTMLDocHandler(document_id, source_url)
+        try:
+            handler.feed(html_bytes.decode("utf-8", errors="replace"))
+            handler.close()
+        except Exception as exc:  # noqa: BLE001
+            raise ParseError(f"HTML 解析失败: {exc}") from exc
+        return ParsedDocument(
+            document_id=document_id,
+            title=handler.title,
+            paragraphs=handler.paragraphs,
+        )
