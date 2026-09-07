@@ -64,7 +64,9 @@ export function deleteDocument(documentId: string): Promise<{ ok: boolean }> {
   return request(`/api/documents/${documentId}`, { method: "DELETE" });
 }
 
-export async function uploadDocument(file: File): Promise<{ ok: boolean; document_id: string }> {
+export async function uploadDocument(
+  file: File,
+): Promise<{ ok: boolean; document_id: string; title?: string }> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${API_BASE}/api/documents/upload`, {
