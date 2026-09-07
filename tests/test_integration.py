@@ -7,13 +7,15 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
 
 from llm import ChatClient, get_api_key, load_config
 
-load_dotenv()
+# 显式指向项目根 .env,避免 python-dotenv find_dotenv 在 Windows 下定位失败
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 pytestmark = pytest.mark.integration
 

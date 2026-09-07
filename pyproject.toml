@@ -11,6 +11,9 @@ dependencies = [
     "qdrant-client>=1.12",
     "pypdf>=5.0",
     "streamlit>=1.36",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
 ]
 
 [tool.uv]
@@ -34,7 +37,7 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.12"
 mypy_path = ["src"]
 explicit_package_bases = true
-files = ["src"]
+files = ["src", "server"]
 ignore_missing_imports = true
 warn_unused_ignores = true
 

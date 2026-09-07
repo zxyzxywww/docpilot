@@ -82,6 +82,29 @@ python scripts/chat.py
 
 > 若你已安装 uv(其他机器),也可以用 `uv sync --all-groups` 管理,命令等效。
 
+### HTTP API server(新架构,前后端分离的前端依赖它)
+
+```bash
+# 安装 API 依赖(fastapi/uvicorn/python-multipart 已随前端工作加入)
+# 启动(项目根目录):
+python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
+# 或开发热重载:python -m uvicorn server.main:app --reload
+```
+
+端点一览(供前端调用):
+
+| 端点 | 说明 |
+|---|---|
+| `POST /api/chat` | 问答 `{question, mode, session_id?}` → 回答 + 引用 + 6 步 RAG 报告 |
+| `GET/POST/DELETE /api/sessions[/id]` | 会话持久化(历史会话列表数据源) |
+| `GET /api/sessions/{id}/messages` | 会话内消息(含引用与 RAG 报告) |
+| `GET /api/documents`、`DELETE /api/documents/{id}` | 文档库列表/删除 |
+| `POST /api/documents/upload` | 上传 XML/PDF 入库(类型/大小/路径安全校验) |
+| `GET /api/stats` | 语料统计与检索/分块配置 |
+| `GET /api/eval/summary` | 评估指标与优化前后对比(读 `data/eval/eval_report.json`) |
+
+交互文档:`http://localhost:8000/docs`(FastAPI 自动生成)。
+
 ## 测试与质量
 
 - `pytest`:离线 mock 测试,默认**不**调用任何真实付费 API
