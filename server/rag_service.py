@@ -13,9 +13,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(_PROJECT_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
-from app.service import Service, build_service  # noqa: E402  (src/app 暂留,Phase 5 前可复用)
-
 from .schemas import ChatResponse, CitationModel, RagReport, TraceStep  # noqa: E402
+from .service_runtime import Service, build_service  # noqa: E402
 
 
 def _citations_to_models(citations: list[Any]) -> list[CitationModel]:

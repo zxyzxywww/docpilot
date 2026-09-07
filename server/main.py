@@ -21,7 +21,6 @@ for _p in (_PROJECT_ROOT, _PROJECT_ROOT / "src", _PROJECT_ROOT / "server"):
 from fastapi import FastAPI, HTTPException, UploadFile  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from app.service import Service  # noqa: E402 (src/app 暂留,Phase 5 迁移后改为本地组装)
 from ingest import IngestService, PDFParser, XMLParser  # noqa: E402
 from ingest.parser import ScannedPDFError  # noqa: E402
 
@@ -34,6 +33,7 @@ from .schemas import (  # noqa: E402
     SessionInfo,
     StatsModel,
 )
+from .service_runtime import Service  # noqa: E402
 from .session_store import SessionStore  # noqa: E402
 
 ALLOWED_SUFFIXES = {".xml", ".pdf"}
