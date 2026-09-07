@@ -3,17 +3,17 @@
 from .chunker import Chunk, chunk_paragraphs
 from .parser import (
     HTMLDocParser,
-    PDFParser,
-    ParseError,
     ParsedDocument,
     ParsedParagraph,
+    ParseError,
+    PDFParser,
     ScannedPDFError,
     XMLParser,
 )
 from .store import (
+    DOC_STATUS,
     BM25Hit,
     BM25Index,
-    DOC_STATUS,
     IndexRebuildRequiredError,
     IngestService,
     QdrantStore,

@@ -89,7 +89,12 @@ def fetch_one(client: httpx.Client, url: str) -> tuple[str | None, str | None, i
             if resp.status_code == 200:
                 ctype = resp.headers.get("content-type", "")
                 if "text/html" not in ctype and "application/xhtml" not in ctype:
-                    return None, f"非 HTML content-type: {ctype}", resp.status_code, len(resp.content)
+                    return (
+                        None,
+                        f"非 HTML content-type: {ctype}",
+                        resp.status_code,
+                        len(resp.content),
+                    )
                 return resp.text, None, 200, len(resp.content)
             if resp.status_code in (403, 404, 451):
                 return None, f"HTTP {resp.status_code}", resp.status_code, 0
@@ -168,7 +173,9 @@ def main() -> int:
                 failed.append(url)
             with manifest_path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            print(f"  [{i}/{len(urls)}] {status or 'ERR'} {domain} {rec.get('size', 0)}B  {url[:80]}")
+            line = f"  [{i}/{len(urls)}] {status or 'ERR'} {domain}"
+            line += f" {rec.get('size', 0)}B  {url[:80]}"
+            print(line)
             time.sleep(RATE_SECONDS)
 
     done = len(urls) - len(failed) + len([u for u in existing if u in urls])

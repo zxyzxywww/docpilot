@@ -100,7 +100,7 @@ export default function KnowledgeBasePage() {
               知识库
             </h1>
             <p className="mt-0.5 text-[13px] text-neutral-500">
-              管理入库文献与检索索引
+              管理已收录文档与检索索引
             </p>
           </div>
           <Button variant="ghost" size="sm" onClick={load} className="text-neutral-500">
@@ -123,7 +123,7 @@ export default function KnowledgeBasePage() {
 
         {/* 统计卡 */}
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard label="已入库文献" value={stats ? String(readyCount) : undefined} sub="ready" />
+          <StatCard label="已收录文档" value={stats ? String(readyCount) : undefined} sub="ready" />
           <StatCard label="文本块 (chunk)" value={stats ? String(totalChunks) : undefined} sub="已向量化" />
           <StatCard label="Embedding 模型" value={stats?.embedding_model ?? undefined} sub={`${stats?.embedding_dimension ?? "–"} 维`} />
           <StatCard label="重排模型" value={stats?.rerank_model ?? undefined} sub="Rerank" />
@@ -138,10 +138,10 @@ export default function KnowledgeBasePage() {
               </div>
               <div>
                 <div className="text-[14px] font-medium text-neutral-800">
-                  上传文献
+                  上传文档
                 </div>
                 <div className="text-[12px] text-neutral-400">
-                  支持 XML / PDF,≤20MB;XML 解析优先,扫描版 PDF 将提示不支持
+                  支持 HTML / XML / PDF,≤20MB;官方文档页或本地文档均可入库
                 </div>
               </div>
             </div>
@@ -224,7 +224,7 @@ export default function KnowledgeBasePage() {
             {docs !== null && docs.length === 0 && (
               <div className="flex flex-col items-center gap-2 py-12 text-neutral-400">
                 <Database className="h-8 w-8" />
-                <p className="text-[13px]">知识库为空,上传第一份文献开始</p>
+                <p className="text-[13px]">知识库为空,上传第一份文档开始</p>
               </div>
             )}
           </CardContent>

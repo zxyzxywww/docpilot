@@ -169,7 +169,7 @@ export function ChatUI() {
                   }
                 }}
                 rows={Math.min(4, Math.max(1, input.split("\n").length))}
-                placeholder="输入你的问题,例如:CycleGAN 在合成 CT 上有哪些局限?"
+                placeholder="输入你的问题,例如:FastAPI 怎么给接口加 JWT 认证?"
                 className="max-h-40 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[14px] outline-none placeholder:text-neutral-400"
               />
               <Button
@@ -214,10 +214,10 @@ function Welcome({ onAsk }: { onAsk: (q: string) => void }) {
         <Sparkles className="h-6 w-6" />
       </div>
       <h2 className="text-xl font-semibold tracking-tight text-neutral-900">
-        医学文献智能问答
+        Python 后端开发文档助手
       </h2>
       <p className="mt-1.5 max-w-md text-center text-[13px] leading-relaxed text-neutral-500">
-        基于已入库顶刊文献回答医学影像问题,每个结论都可溯源到原文;复杂问题自动切换深度调研模式。
+        基于 FastAPI / Pydantic / SQLAlchemy / Python 官方文档回答开发问题,回答含完整代码示例与文档链接溯源;复杂需求自动切换深度调研模式。
       </p>
       <div className="mt-6 grid w-full max-w-xl gap-2">
         {EXAMPLE_QUESTIONS.map((q) => (

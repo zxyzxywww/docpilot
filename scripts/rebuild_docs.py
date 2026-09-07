@@ -63,7 +63,11 @@ def main() -> int:
         chunk_overlap_tokens=config.chunking.chunk_overlap_tokens,
     )
 
-    recs = [json.loads(l) for l in MANIFEST.read_text(encoding="utf-8").splitlines() if l.strip()]
+    recs = [
+        json.loads(ln)
+        for ln in MANIFEST.read_text(encoding="utf-8").splitlines()
+        if ln.strip()
+    ]
     print(f"[rebuild_docs] manifest 共 {len(recs)} 页,开始清空旧语料…")
     sqlite.wipe()
     qdrant.clear()

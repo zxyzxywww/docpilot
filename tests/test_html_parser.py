@@ -13,8 +13,7 @@ FASTAPI_LIKE = """<!DOCTYPE html>
 <p>FastAPI has a very powerful dependency injection system.</p>
 <h2>What are Dependencies</h2>
 <p>Dependencies let you share common logic.</p>
-<div class="highlight"><pre><span></span><code><span class="k">from</span> <span class="n">typing</span> <span class="k">import</span> <span class="n">Annotated</span>
-<span class="k">from</span> <span class="n">fastapi</span> <span class="k">import</span> <span class="n">Depends</span><span class="p">,</span> <span class="n">FastAPI</span></code></pre></div>
+<div class="highlight"><pre><code>from fastapi import Depends, FastAPI</code></pre></div>
 <h2>Recap</h2>
 <p>That is the gist of dependencies.</p>
 </article>

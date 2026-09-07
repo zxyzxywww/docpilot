@@ -94,7 +94,7 @@ def test_main_writes_manifest(tmp_path: Path, monkeypatch) -> None:
     assert rc == 0
 
     manifest = out / "manifest.jsonl"
-    rows = [json.loads(l) for l in manifest.read_text(encoding="utf-8").splitlines()]
+    rows = [json.loads(ln) for ln in manifest.read_text(encoding="utf-8").splitlines()]
     assert len(rows) == 3
     ok = [r for r in rows if r["status"] == 200]
     fail = [r for r in rows if r["status"] != 200]

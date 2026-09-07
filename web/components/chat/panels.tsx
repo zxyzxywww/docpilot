@@ -204,10 +204,10 @@ export function TracePanel({ report }: { report: RagReport | null }) {
 // ---------------------------------------------------------------- 模式与示例
 
 export const EXAMPLE_QUESTIONS = [
-  "磁共振到CT图像合成一般用什么深度学习方法?",
-  "比较GAN和扩散模型在合成CT生成上的差异",
-  "CycleGAN在合成CT上有什么局限性?",
-  "synthetic CT 评估常用哪些指标?",
+  "FastAPI 怎么给接口加 OAuth2 密码流认证?",
+  "FastAPI 中 Depends 与子依赖的执行顺序是什么?",
+  "FastAPI 里如何限制 UploadFile 的大小与类型?",
+  "Pydantic v2 中 model_config 的 extra 选项怎么用?",
 ];
 
 export function ModeSelect({
