@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   chat,
+  createSession,
   deleteSession,
   getMessages,
   listSessions,
+  patchSessionMode,
 } from "@/lib/api";
 import type { ChatMessage, SessionInfo } from "@/lib/types";
 import { Markdown } from "./markdown";
@@ -20,24 +22,46 @@ import {
   TracePanel,
 } from "./panels";
 
-type Role = ChatMessage["role"];
-
+/**
+ * 会话级状态管理:
+ * - bySession: 每个会话独立消息缓存(切走不丢进行中内容)
+ * - modeBySession: 模式是会话属性(draft 用 draftMode),持久化到后端 chat_sessions.mode
+ * - running: 按 session_id 标记执行中,切换会话不取消任务
+ * - 生命周期: draft(未发送,不落库)→ 发送瞬间 POST /api/sessions 建会话 →
+ *   user 立即写入(前端缓存+后端)→ 回答完成后 assistant 写回同一会话
+ */
 export function ChatUI() {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [bySession, setBySession] = useState<Record<string, ChatMessage[]>>({});
+  const [draftMsgs, setDraftMsgs] = useState<ChatMessage[]>([]);
+  const [modeBySession, setModeBySession] = useState<Record<string, string>>({});
+  const [draftMode, setDraftMode] = useState("auto");
+  const [running, setRunning] = useState<Record<string, boolean>>({});
+  const [errBySession, setErrBySession] = useState<Record<string, string>>({});
+  const [draftErr, setDraftErr] = useState<string | null>(null);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState("auto");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // 派生:当前渲染内容与模式
+  const msgs = activeId ? (bySession[activeId] ?? []) : draftMsgs;
+  const curMode = activeId ? (modeBySession[activeId] ?? "auto") : draftMode;
+  const isRunning = activeId ? !!running[activeId] : false;
+  const curErr = activeId ? (errBySession[activeId] ?? null) : draftErr;
+
   const refreshSessions = useCallback(async () => {
     try {
-      setSessions(await listSessions());
+      const list = await listSessions();
+      setSessions(list);
+      // 同步会话级 mode(用于切换/刷新后恢复)
+      setModeBySession((prev) => {
+        const next = { ...prev };
+        for (const s of list) next[s.session_id] = s.mode;
+        return next;
+      });
     } catch {
-      setSessions([]);
+      /* 后端不可达时保留旧列表 */
     }
   }, []);
 
@@ -47,28 +71,32 @@ export function ChatUI() {
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, loading]);
+  }, [msgs, isRunning]);
 
+  const focusInput = () => {
+    // 让出当前事件循环,等渲染后再聚焦
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  /** 新建/回到空草稿:只重置本地状态,不创建任何数据库记录(场景 E) */
   const newChat = () => {
-    // 新建/回到"空白草稿会话":只重置本地状态,不创建数据库记录
-    // (首条消息发送时才由后端真正建会话,避免空会话垃圾);
-    // 输入框聚焦给出即时反馈(欢迎态下点按钮也有可见响应)。
     setActiveId(null);
-    setMessages([]);
+    setDraftMsgs([]);
+    setDraftMode("auto");
+    setDraftErr(null);
     setInput("");
-    setError(null);
-    inputRef.current?.focus();
+    focusInput();
   };
 
   const selectSession = async (id: string) => {
     setActiveId(id);
-    setError(null);
-    setInput(""); // 切换会话时清掉上一个 draft,避免误发
+    setInput("");
+    setDraftErr(null);
     try {
-      const msgs = await getMessages(id);
-      // user 消息 content 原样;assistant 消息恢复 citations/report
-      setMessages(
-        msgs.map((m) => ({
+      const history = await getMessages(id);
+      setBySession((prev) => ({
+        ...prev,
+        [id]: history.map((m) => ({
           role: m.role,
           content: m.content,
           citations: m.citations ?? [],
@@ -77,35 +105,80 @@ export function ChatUI() {
           report: m.report ?? null,
           created_at: m.created_at,
         })),
-      );
+      }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "加载会话失败");
+      setErrBySession((prev) => ({
+        ...prev,
+        [id]: e instanceof Error ? e.message : "加载会话失败",
+      }));
     }
   };
 
   const removeSession = async (id: string) => {
     try {
       await deleteSession(id);
-      if (id === activeId) newChat();
-      refreshSessions();
+      if (id === activeId) {
+        newChat();
+      } else {
+        refreshSessions();
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "删除失败");
+      setErrBySession((prev) => ({
+        ...prev,
+        [id]: e instanceof Error ? e.message : "删除失败",
+      }));
     }
   };
 
-  const submit = async (text?: string) => {
+  /** 更新当前会话/草稿的模式(会话级,持久化到后端) */
+  const updateMode = (next: string) => {
+    if (activeId) {
+      setModeBySession((prev) => ({ ...prev, [activeId]: next }));
+      patchSessionMode(activeId, next).catch(() => {
+        setErrBySession((prev) => ({
+          ...prev,
+          [activeId]: "模式保存失败,请重试",
+        }));
+      });
+    } else {
+      setDraftMode(next);
+    }
+  };
+
+  const send = async (text?: string) => {
     const q = (text ?? input).trim();
-    if (!q || loading) return;
+    if (!q || isRunning) return;
     setInput("");
-    setError(null);
-    setLoading(true);
+    if (activeId) setErrBySession((prev) => ({ ...prev, [activeId]: "" }));
+    else setDraftErr(null);
 
+    // 1) 发送瞬间:若无会话先建会话(draft → 真实 session),会话存在 ≠ 回答完成
+    let sid = activeId;
+    if (!sid) {
+      try {
+        const created = await createSession();
+        sid = created.session_id;
+        setActiveId(sid);
+        setDraftMsgs([]);
+      } catch {
+        setDraftErr("创建会话失败,请确认后端已启动");
+        return;
+      }
+    }
+    const mode = modeBySession[sid] ?? "auto";
     const userMsg: ChatMessage = { role: "user", content: q, created_at: "" };
-    const prev = messages;
-    setMessages([...prev, userMsg]);
 
+    // 2) user 立即可见(前端缓存 + 后端落库),标记该会话 running
+    setBySession((prev) => ({
+      ...prev,
+      [sid]: [...(prev[sid] ?? []), userMsg],
+    }));
+    setRunning((prev) => ({ ...prev, [sid]: true }));
+    refreshSessions(); // 让左侧立即出现新会话(标题随后台更新)
+
+    // 3) 后台执行回答(同步 API 阻塞本请求,但 UI 可自由切换其他会话)
     try {
-      const resp = await chat(q, mode, activeId ?? undefined);
+      const resp = await chat(q, mode, sid);
       const assistantMsg: ChatMessage = {
         role: "assistant",
         content: resp.answer,
@@ -115,19 +188,24 @@ export function ChatUI() {
         report: resp.report,
         created_at: "",
       };
-      setMessages([...prev, userMsg, assistantMsg]);
-      setActiveId(resp.session_id);
-      refreshSessions();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "请求失败,请确认后端已启动 (python -m uvicorn server.main:app --port 8000)");
-      setMessages(prev);
+      // 4) 完成:assistant 写回同一会话(即使当前已切到别处,也按 sid 归位)
+      setBySession((prev) => ({
+        ...prev,
+        [sid]: [...(prev[sid] ?? []), assistantMsg],
+      }));
+    } catch {
+      setErrBySession((prev) => ({
+        ...prev,
+        [sid]: "回答失败,请重试(会话与问题已保留)",
+      }));
     } finally {
-      setLoading(false);
+      setRunning((prev) => ({ ...prev, [sid]: false }));
+      refreshSessions();
     }
   };
 
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const showWelcome = !loading && messages.length === 0;
+  const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
+  const showWelcome = msgs.length === 0;
 
   return (
     <div className="flex h-full">
@@ -136,6 +214,7 @@ export function ChatUI() {
         <SessionList
           sessions={sessions}
           activeId={activeId}
+          running={running}
           onSelect={selectSession}
           onNew={newChat}
           onDelete={removeSession}
@@ -144,20 +223,20 @@ export function ChatUI() {
 
       {/* 中:对话区 */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {error && (
+        {curErr && (
           <div className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-[13px] text-amber-700">
-            {error}
+            {curErr}
           </div>
         )}
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          {showWelcome ? (
-            <Welcome onAsk={(q) => submit(q)} />
+          {showWelcome && !isRunning ? (
+            <Welcome onAsk={(q) => send(q)} />
           ) : (
             <div className="mx-auto max-w-3xl px-6 py-6">
-              {messages.map((m, i) => (
+              {msgs.map((m, i) => (
                 <MessageBubble key={i} msg={m} />
               ))}
-              {loading && <LoadingBubble />}
+              {isRunning && <LoadingBubble />}
             </div>
           )}
         </div>
@@ -173,7 +252,7 @@ export function ChatUI() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    submit();
+                    send();
                   }
                 }}
                 rows={Math.min(4, Math.max(1, input.split("\n").length))}
@@ -182,17 +261,17 @@ export function ChatUI() {
               />
               <Button
                 size="icon"
-                disabled={loading || !input.trim()}
-                onClick={() => submit()}
+                disabled={isRunning || !input.trim()}
+                onClick={() => send()}
                 className="h-9 w-9 shrink-0 rounded-lg"
               >
                 <ArrowUp className="h-4 w-4" />
               </Button>
             </div>
             <div className="mt-2 flex items-center justify-between">
-              <ModeSelect value={mode} onChange={setMode} />
+              <ModeSelect value={curMode} onChange={updateMode} />
               <span className="text-[11px] text-neutral-400">
-                Enter 发送 · Shift+Enter 换行
+                Enter 发送 · Shift+Enter 换行 · 模式与会话绑定
               </span>
             </div>
           </div>
@@ -201,9 +280,7 @@ export function ChatUI() {
 
       {/* 右:RAG 链路 */}
       <div className="w-80 shrink-0 border-l border-neutral-200 bg-neutral-50/60">
-        <TracePanel
-          report={lastAssistant?.report ?? null}
-        />
+        <TracePanel report={lastAssistant?.report ?? null} />
         {!lastAssistant && (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center text-[12px] text-neutral-400">
             <BookOpen className="h-5 w-5" />
@@ -247,7 +324,7 @@ function LoadingBubble() {
     <div className="mb-5">
       <div className="flex items-center gap-1.5 pb-2 text-[12px] text-neutral-400">
         <Skeleton className="h-3 w-3 rounded-full" />
-        <span>检索证据并生成回答…</span>
+        <span>检索证据并生成回答…(可先切换其他会话,结果会回到本会话)</span>
       </div>
       <div className="space-y-2">
         <Skeleton className="h-4 w-full max-w-xl" />

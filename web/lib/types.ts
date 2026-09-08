@@ -53,6 +53,7 @@ export interface ChatResponse {
 export interface SessionInfo {
   session_id: string;
   title: string;
+  mode: string;
   created_at: string;
   updated_at: string;
   message_count: number;

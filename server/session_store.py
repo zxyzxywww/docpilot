@@ -34,6 +34,7 @@ class SessionStore:
             CREATE TABLE IF NOT EXISTS chat_sessions (
                 session_id   TEXT PRIMARY KEY,
                 title        TEXT NOT NULL DEFAULT '新对话',
+                mode         TEXT NOT NULL DEFAULT 'auto',
                 created_at   TEXT NOT NULL,
                 updated_at   TEXT NOT NULL
             );
@@ -42,34 +43,46 @@ class SessionStore:
                 session_id  TEXT NOT NULL,
                 role        TEXT NOT NULL,          -- user | assistant
                 content     TEXT NOT NULL,
-                extra       TEXT NOT NULL DEFAULT '{}',  -- JSON: citations/mode/stop_reason
+                extra       TEXT NOT NULL DEFAULT '{}',  -- JSON: citations/stop_reason
                 created_at  TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_messages_session
                 ON chat_messages(session_id, id);
             """
         )
+        # 旧库迁移:chat_sessions 增加 mode 列(历史会话默认 auto)
+        cols = {r[1] for r in self._conn.execute("PRAGMA table_info(chat_sessions)")}
+        if "mode" not in cols:
+            self._conn.execute(
+                "ALTER TABLE chat_sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'auto'"
+            )
         self._conn.commit()
 
     # ------------------------------------------------------------ 会话
 
-    def create_session(self, title: str = "新对话") -> dict[str, Any]:
+    def create_session(self, title: str = "新对话", mode: str = "auto") -> dict[str, Any]:
         session_id = uuid.uuid4().hex
         ts = _now()
         with self._lock:
             self._conn.execute(
-                "INSERT INTO chat_sessions(session_id, title, created_at, updated_at)"
-                " VALUES(?,?,?,?)",
-                (session_id, title, ts, ts),
+                "INSERT INTO chat_sessions(session_id, title, mode, created_at, updated_at)"
+                " VALUES(?,?,?,?,?)",
+                (session_id, title, mode, ts, ts),
             )
             self._conn.commit()
-        return {"session_id": session_id, "title": title, "created_at": ts, "updated_at": ts}
+        return {
+            "session_id": session_id,
+            "title": title,
+            "mode": mode,
+            "created_at": ts,
+            "updated_at": ts,
+        }
 
     def list_sessions(self) -> list[dict[str, Any]]:
         with self._lock:
             rows = self._conn.execute(
                 """
-                SELECT s.session_id, s.title, s.created_at, s.updated_at,
+                SELECT s.session_id, s.title, s.mode, s.created_at, s.updated_at,
                        (SELECT COUNT(*) FROM chat_messages m
                         WHERE m.session_id = s.session_id) AS message_count
                 FROM chat_sessions s
@@ -84,6 +97,15 @@ class SessionStore:
                 "SELECT * FROM chat_sessions WHERE session_id=?", (session_id,)
             ).fetchone()
         return dict(row) if row else None
+
+    def update_mode(self, session_id: str, mode: str) -> None:
+        ts = _now()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE chat_sessions SET mode=?, updated_at=? WHERE session_id=?",
+                (mode, ts, session_id),
+            )
+            self._conn.commit()
 
     def update_session_title(self, session_id: str, title: str) -> None:
         ts = _now()

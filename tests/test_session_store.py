@@ -43,3 +43,28 @@ def test_session_order_by_updated(tmp_path: Path) -> None:
     assert sessions[0]["session_id"] == a
     assert sessions[1]["session_id"] == b
     store.close()
+
+
+def test_schema_migration_adds_mode(tmp_path: Path) -> None:
+    """旧库(chat_sessions 无 mode 列)打开后自动 ALTER 加列并默认 auto。"""
+    import sqlite3
+    db = tmp_path / "old.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE chat_sessions (session_id TEXT PRIMARY KEY, title TEXT, "
+        "created_at TEXT, updated_at TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO chat_sessions VALUES ('old1','历史会话','t','t')"
+    )
+    conn.commit()
+    conn.close()
+
+    store = SessionStore(db)
+    s = store.get_session("old1")
+    assert s is not None
+    assert s["mode"] == "auto"          # 历史会话默认 auto
+    # 新建会话带 mode
+    s2 = store.create_session(mode="agentic")
+    assert store.get_session(s2["session_id"])["mode"] == "agentic"
+    store.close()

@@ -205,3 +205,31 @@ def test_upload_html_accepted(client: TestClient, fake_service, monkeypatch) -> 
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["ok"] is True
+
+
+# ------------------------------------------------- 会话级状态(问题 1/2 回归)
+
+def test_create_session_endpoint_default_mode(client, fake_service, fake_store) -> None:
+    body = client.post("/api/sessions").json()
+    assert body["session_id"]
+    assert body["mode"] == "auto"
+    assert body["title"] == "新对话"
+    assert fake_store.get_session(body["session_id"]) is not None
+
+
+def test_patch_session_mode_persisted(client, fake_service, fake_store) -> None:
+    sid = fake_store.create_session()["session_id"]
+    r = client.patch(f"/api/sessions/{sid}", json={"mode": "agentic"})
+    assert r.status_code == 200
+    assert r.json()["mode"] == "agentic"
+    # 持久化:重新读库仍为 agentic
+    assert fake_store.get_session(sid)["mode"] == "agentic"
+    # 会话列表返回 mode
+    listed = client.get("/api/sessions").json()
+    assert any(s["session_id"] == sid and s["mode"] == "agentic" for s in listed)
+    # 未提供 mode → 不改动
+    assert client.patch(f"/api/sessions/{sid}", json={}).status_code == 200
+
+
+def test_patch_session_404(client, fake_service, fake_store) -> None:
+    assert client.patch("/api/sessions/nope", json={"mode": "direct"}).status_code == 404

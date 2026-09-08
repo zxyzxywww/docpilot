@@ -19,12 +19,14 @@ import { Markdown } from "./markdown";
 export function SessionList({
   sessions,
   activeId,
+  running = {},
   onSelect,
   onNew,
   onDelete,
 }: {
   sessions: SessionInfo[];
   activeId: string | null;
+  running?: Record<string, boolean>;
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
@@ -53,7 +55,15 @@ export function SessionList({
             onClick={() => onSelect(s.session_id)}
           >
             <div className="min-w-0 flex-1">
-              <div className="truncate font-medium">{s.title}</div>
+              <div className="flex items-center gap-1.5">
+                <span className="truncate font-medium">{s.title}</span>
+                {running[s.session_id] && (
+                  <span className="flex shrink-0 items-center gap-1 text-[10px] font-medium text-sky-600">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-sky-500" />
+                    生成中
+                  </span>
+                )}
+              </div>
               <div className="text-[11px] text-neutral-400">
                 {s.message_count} 条消息 · {s.updated_at.slice(5, 16)}
               </div>

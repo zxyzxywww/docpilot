@@ -23,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from ingest import HTMLDocParser, IngestService, PDFParser, XMLParser  # noqa: E402
 from ingest.parser import ScannedPDFError  # noqa: E402
+from llm import load_config  # noqa: E402
 
 from .rag_service import RagEngine, run_chat  # noqa: E402
 from .schemas import (  # noqa: E402
@@ -31,6 +32,7 @@ from .schemas import (  # noqa: E402
     DocumentModel,
     MessageModel,
     SessionInfo,
+    SessionUpdate,
     StatsModel,
 )
 from .service_runtime import Service  # noqa: E402
@@ -45,11 +47,14 @@ _STORE: SessionStore | None = None
 
 
 def _get_store() -> SessionStore:
-    """会话库(lazy,与 service 共用 SQLite 文件)。"""
+    """会话库(lazy):仅依赖轻量配置读取,不构建 RAG service。
+
+    会话 CRUD(创建/列表/PATCH/删除/消息)必须与 RAG/Qdrant 解耦:
+    即使检索后端暂不可用,会话本身也应可创建(生命周期:会话存在 ≠ 回答完成)。
+    """
     global _STORE
-    svc = RagEngine.get_service()
     if _STORE is None:
-        _STORE = SessionStore(svc.config.database.sqlite_path)
+        _STORE = SessionStore(load_config().database.sqlite_path)
     return _STORE
 
 
@@ -85,10 +90,11 @@ def chat(req: ChatRequest) -> ChatResponse:
         if title:
             store.update_session_title(session_id, title)
 
+    # 先落 user 消息(会话与用户问题在回答完成前就可见/可切回),再执行回答;
+    # 回答完成后把 assistant 写回同一会话(生命周期:会话存在 != 回答完成)。
+    store.add_message(session_id, "user", req.question, {"mode": req.mode})
     resp = run_chat(req.question, mode=req.mode)
     resp.session_id = session_id
-
-    store.add_message(session_id, "user", req.question, {"mode": resp.mode})
     store.add_message(
         session_id,
         "assistant",
@@ -107,6 +113,24 @@ def chat(req: ChatRequest) -> ChatResponse:
 @app.get("/api/sessions", response_model=list[SessionInfo])
 def list_sessions() -> list[dict[str, Any]]:
     return _get_store().list_sessions()
+
+
+@app.post("/api/sessions", response_model=SessionInfo)
+def create_session() -> dict[str, Any]:
+    """显式创建空会话(默认 auto 模式):发送首条消息前先建会话,
+    使「会话的存在」与「回答是否完成」解耦(问题 1 生命周期)。"""
+    return _get_store().create_session()
+
+
+@app.patch("/api/sessions/{session_id}", response_model=SessionInfo)
+def update_session(session_id: str, req: SessionUpdate) -> dict[str, Any]:
+    """更新会话元数据(当前仅 mode):模式是会话级状态并持久化(问题 2)。"""
+    store = _get_store()
+    if store.get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    if req.mode is not None:
+        store.update_mode(session_id, req.mode)
+    return store.get_session(session_id)  # type: ignore[return-value]
 
 
 @app.get("/api/sessions/{session_id}/messages", response_model=list[MessageModel])

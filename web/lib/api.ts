@@ -46,6 +46,22 @@ export function listSessions(): Promise<SessionInfo[]> {
   return request<SessionInfo[]>("/api/sessions");
 }
 
+/** 发送首条消息前显式创建空会话(会话存在 ≠ 回答完成) */
+export function createSession(): Promise<SessionInfo> {
+  return request<SessionInfo>("/api/sessions", { method: "POST" });
+}
+
+/** 更新会话级元数据(当前仅模式:会话 A 深度调研 / 会话 B 快速问答,互不串扰) */
+export function patchSessionMode(
+  sessionId: string,
+  mode: string,
+): Promise<SessionInfo> {
+  return request<SessionInfo>(`/api/sessions/${sessionId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ mode }),
+  });
+}
+
 export function getMessages(sessionId: string): Promise<ChatMessage[]> {
   return request<ChatMessage[]>(`/api/sessions/${sessionId}/messages`);
 }

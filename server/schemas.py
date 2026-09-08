@@ -58,9 +58,16 @@ class ChatResponse(BaseModel):
     report: RagReport | None = None
 
 
+class SessionUpdate(BaseModel):
+    """会话元数据更新(当前仅模式)。"""
+
+    mode: str | None = None
+
+
 class SessionInfo(BaseModel):
     session_id: str
     title: str
+    mode: str = "auto"
     created_at: str
     updated_at: str
     message_count: int = 0
