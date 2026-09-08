@@ -69,12 +69,12 @@ class ChunkingConfig(BaseModel):
 class QdrantConfig(BaseModel):
     mode: str = "local"  # local(开发) | docker(部署)
     path: str = "data/db/qdrant"
-    collection: str = "medidoc_chunks"
+    collection: str = "docpilot_chunks"
     docker_url: str = "http://localhost:6333"
 
 
 class DatabaseConfig(BaseModel):
-    sqlite_path: str = "data/db/medidoc.db"
+    sqlite_path: str = "data/db/docpilot.db"
     qdrant: QdrantConfig = Field(default_factory=QdrantConfig)
 
 

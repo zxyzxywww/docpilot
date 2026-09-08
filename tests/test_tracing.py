@@ -24,7 +24,7 @@ def test_tracer_records_steps(caplog) -> None:
 def test_tracer_emit_writes_json_line(caplog) -> None:
     tracer = Tracer()
     tracer.step("retrieve", recall_chunk_ids=["x"])
-    with caplog.at_level(logging.INFO, logger="medidoc.trace"):
+    with caplog.at_level(logging.INFO, logger="docpilot.trace"):
         tracer.emit(error=None)
     assert any("trace_id" in r.message for r in caplog.records)
 

@@ -1,11 +1,11 @@
 @echo off
-title MediDoc - Start Services
+title DocPilot - Start Services
 cd /d "%~dp0"
 
 set "PATH=C:\Users\29446\AppData\Local\Programs\DockerDesktop\resources\bin;%PATH%"
 
 echo ==============================================
-echo   MediDoc Knowledge Q&A - Service Launcher
+echo   DocPilot Knowledge Q&A - Service Launcher
 echo   Qdrant(6333) + API(8000) + Web(3000)
 echo ==============================================
 echo.

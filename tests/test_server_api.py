@@ -21,7 +21,7 @@ def fake_service(tmp_path: Path, monkeypatch) -> SimpleNamespace:
     from llm.config import load_config
 
     cfg = load_config()
-    cfg.database.sqlite_path = str(tmp_path / "medidoc_test.db")
+    cfg.database.sqlite_path = str(tmp_path / "docpilot_test.db")
 
     docs = [
         {

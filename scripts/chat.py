@@ -16,9 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from llm import ChatClient, get_api_key, load_config  # noqa: E402
 
 SYSTEM_PROMPT = (
-    "你是 MediDoc,一个医学文献研究助手。"
-    "仅用于公开医学文献检索与研究辅助,不提供诊断或治疗建议。"
-    "对没有依据的问题,请明确说明证据不足。"
+    "你是 DocPilot,Python 后端开发文档问答助手。"
+    "仅基于已入库的官方开发文档(FastAPI/Pydantic/SQLAlchemy/Python)作答。"
+    "对没有依据的问题,请明确说明证据不足,不要编造 API 用法。"
 )
 
 
@@ -27,7 +27,7 @@ def main() -> None:
     api_key = get_api_key("deepseek")
     client = ChatClient(config.chat, api_key)
 
-    print("MediDoc 对话测试(输入 exit 退出)")
+    print("DocPilot 对话测试(输入 exit 退出)")
     messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     while True:
         try:
@@ -39,7 +39,7 @@ def main() -> None:
             break
         messages.append({"role": "user", "content": user_input})
         result = client.chat(messages)
-        print(f"MediDoc: {result.text}")
+        print(f"DocPilot: {result.text}")
         print(
             f"[model={result.model} tokens={result.prompt_tokens}+{result.completion_tokens}"
             f" 约¥{result.estimated_cost_yuan}]"

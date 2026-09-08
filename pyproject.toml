@@ -1,7 +1,7 @@
 [project]
-name = "medidoc"
+name = "docpilot"
 version = "0.1.0"
-description = "MediDoc - 医学文献智能问答 Agent(仅用于公开医学文献检索与研究辅助,不提供医疗建议)"
+description = "DocPilot - 面向 Python 后端开发文档的 Agentic RAG 知识助手"
 requires-python = ">=3.11"
 dependencies = [
     "openai>=1.60",

@@ -30,7 +30,7 @@ def test_embedding_model_fixed() -> None:
 
 def test_mvp_redlines_enabled() -> None:
     cfg = load_config()
-    assert cfg.mvp["no_patient_data"] is True
-    assert cfg.mvp["no_medical_advice"] is True
+    assert cfg.mvp["official_docs_only"] is True
+    assert cfg.mvp["no_user_data"] is True
     assert cfg.mvp["refuse_without_evidence"] is True
     assert cfg.mvp["citations_required"] is True

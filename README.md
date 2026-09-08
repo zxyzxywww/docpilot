@@ -38,7 +38,7 @@
 ## 目录结构
 
 ```
-medidoc/
+medidoc/          # = DocPilot 项目(工作区目录名沿用)
 ├── README.md            # 本文件,每阶段结束更新
 ├── pyproject.toml       # 依赖与元数据 + ruff/mypy/pytest 配置
 ├── uv.lock              # 版本锁定(uv 管理)
@@ -69,8 +69,8 @@ medidoc/
 
 ```bash
 # 1. 创建 conda 环境(Python 3.12)并激活
-conda create -n medidoc python=3.12 -y
-conda activate medidoc
+conda create -n docpilot python=3.12 -y
+conda activate docpilot
 
 # 2. 安装依赖(与 pyproject.toml 对齐)
 pip install openai pydantic python-dotenv pyyaml httpx qdrant-client pypdf pytest pytest-mock ruff mypy pygments

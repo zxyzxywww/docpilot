@@ -24,7 +24,7 @@ from llm import EmbeddingClient, get_api_key, load_config  # noqa: E402
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="MediDoc 文献入库")
+    parser = argparse.ArgumentParser(description="DocPilot 文档入库")
     parser.add_argument("--manifest", default="data/raw/manifest.jsonl")
     parser.add_argument("--only", default="", help="逗号分隔的 document_id 白名单")
     parser.add_argument("--delete", default="", help="删除指定 document_id")

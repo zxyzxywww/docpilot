@@ -53,7 +53,7 @@ def _get_store() -> SessionStore:
     return _STORE
 
 
-app = FastAPI(title="MediDoc API", version="2.0.0")
+app = FastAPI(title="DocPilot API", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 本地开发;生产可收窄为前端地址

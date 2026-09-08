@@ -14,7 +14,7 @@ import time
 import uuid
 from typing import Any
 
-logger = logging.getLogger("medidoc.trace")
+logger = logging.getLogger("docpilot.trace")
 
 
 class Tracer:

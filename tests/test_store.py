@@ -67,7 +67,7 @@ def _manifest_rec(tmp_path: Path, doc_id: str = "doc0001", xml: str = SAMPLE_XML
 
 
 def _service(tmp_path: Path, dim: int = 4) -> IngestService:
-    sqlite = SQLiteStore(tmp_path / "medidoc.db")
+    sqlite = SQLiteStore(tmp_path / "docpilot.db")
     qdrant = QdrantStore(_qdrant_config(tmp_path, dim), dim)
     return IngestService(sqlite, qdrant, BM25Index(), FakeEmbedder(dim))
 

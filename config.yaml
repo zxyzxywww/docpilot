@@ -1,15 +1,15 @@
 # ============================================================
-# MediDoc 配置中心 —— 所有可调参数集中管理
+# DocPilot 配置中心 —— 所有可调参数集中管理
 # 模型 / 检索 / 分块 / 数据库 / 预算 / 日志 全部在此
 # ============================================================
 
 # ---- MVP 定位红线(同时写入 README 与 system prompt)----
 mvp:
-  purpose: "仅用于公开医学文献检索与研究辅助"
-  no_patient_data: true           # 禁止处理真实患者隐私数据
-  no_medical_advice: true         # 不提供诊断或治疗决策
+  purpose: "仅面向 Python 后端官方开发文档(FastAPI/Pydantic/SQLAlchemy/Python)的技术问答"
+  official_docs_only: true        # 仅检索白名单官方文档(不引入外部随意内容)
+  no_user_data: true              # 不处理任何用户隐私/私有数据
   refuse_without_evidence: true   # 证据不足必须拒答
-  citations_required: true        # 重要医学结论必须有真实检索证据和引用
+  citations_required: true        # 技术结论必须带真实检索证据与官方文档引用
 
 # ---- LLM 供应商(全部 API,无本地模型)----
 llm:
@@ -58,11 +58,11 @@ chunking:
 
 # ---- 存储 ----
 database:
-  sqlite_path: "data/db/medidoc.db"     # 唯一事实来源(文档/chunk 元数据/导入状态)
+  sqlite_path: "data/db/docpilot.db"     # 唯一事实来源(文档/chunk 元数据/导入状态)
   qdrant:
     mode: "docker"                      # local(开发) | docker(部署);部署前改为 docker
     path: "data/db/qdrant"              # local mode 持久化目录(可重建派生索引)
-    collection: "medidoc_chunks"
+    collection: "docpilot_chunks"
     docker_url: "http://localhost:6333"
 
 # ---- 成本预算(学生预算,全透明)----

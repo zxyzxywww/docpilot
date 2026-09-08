@@ -113,7 +113,7 @@ def _run_agentic(config, embedder, pipeline, preprocessor, sqlite, chat, questio
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="MediDoc 医学文献问答(direct/agentic)")
+    parser = argparse.ArgumentParser(description="DocPilot 开发文档问答(direct/agentic)")
     parser.add_argument("question", help="问题(中文或英文)")
     parser.add_argument("--mode", choices=["auto", "direct", "agentic"], default="auto")
     parser.add_argument("--verbose", action="store_true", help="显示引用与观测详情")
@@ -124,7 +124,7 @@ def main() -> int:
         level=getattr(logging, config.logging.get("level", "INFO")), format="%(message)s"
     )
     if not config.logging.get("trace", True):
-        logging.getLogger("medidoc.trace").setLevel(logging.CRITICAL)
+        logging.getLogger("docpilot.trace").setLevel(logging.CRITICAL)
 
     chat = ChatClient(config.chat, get_api_key("deepseek"))
     embedder = EmbeddingClient(config.embedding, get_api_key("siliconflow"))

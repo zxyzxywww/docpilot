@@ -243,4 +243,4 @@ def _run_agentic(svc: Service, question: str, t_start: float) -> ChatResponse:
     )
 
 
-logging.getLogger("medidoc.trace").setLevel(logging.CRITICAL)
+logging.getLogger("docpilot.trace").setLevel(logging.CRITICAL)

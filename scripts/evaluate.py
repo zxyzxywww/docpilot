@@ -105,7 +105,7 @@ def _print_report(title: str, retrieval: dict, generation: dict, cost: dict) -> 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="MediDoc 评估")
+    parser = argparse.ArgumentParser(description="DocPilot 评估")
     parser.add_argument("--build", action="store_true", help="构建评估集")
     parser.add_argument("--split", choices=["dev", "test"], default="test")
     parser.add_argument("--judge", action="store_true", help="附加 LLM-as-judge 打分")
@@ -113,7 +113,7 @@ def main() -> int:
     args = parser.parse_args()
 
     config = load_config()
-    logging.getLogger("medidoc.trace").setLevel(logging.CRITICAL)  # 评估时静默观测日志
+    logging.getLogger("docpilot.trace").setLevel(logging.CRITICAL)  # 评估时静默观测日志
     chat = ChatClient(config.chat, get_api_key("deepseek"))
     embedder = EmbeddingClient(config.embedding, get_api_key("siliconflow"))
     rerank = RerankClient(config.rerank, get_api_key("siliconflow"))

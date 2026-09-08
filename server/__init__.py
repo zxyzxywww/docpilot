@@ -1,1 +1,1 @@
-"""MediDoc HTTP API server(FastAPI)。"""
+"""DocPilot HTTP API server(FastAPI)。"""
