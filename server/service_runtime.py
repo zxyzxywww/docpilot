@@ -59,7 +59,13 @@ def build_service() -> Service:
     pipeline = RetrieverPipeline(
         DenseRetriever(qdrant), BM25Retriever(bm25, sqlite), rerank, config.retrieval
     )
-    rag = DirectRAG(chat, sqlite, config.rag.min_relevance_score)
+    rag = DirectRAG(
+        chat,
+        sqlite,
+        min_relevance_score=config.rag.min_relevance_score,
+        gate_enabled=config.rag.gate_enabled,
+        gate_threshold=config.rag.gate_threshold,
+    )
     preprocessor = QueryPreprocessor(chat)
     return Service(
         config, sqlite, qdrant, bm25, pipeline, rag, preprocessor, chat, embedder, rerank

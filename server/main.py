@@ -28,7 +28,6 @@ from llm import load_config  # noqa: E402
 from .rag_service import RagEngine  # noqa: E402
 from .schemas import (  # noqa: E402
     ChatRequest,
-    ChatResponse,
     DocumentModel,
     MessageModel,
     RunCreated,

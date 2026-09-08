@@ -82,6 +82,8 @@ agent:
 # ---- 生成层(阶段五调参:拒答相关性阈值)----
 rag:
   min_relevance_score: 0.3              # 检索证据相关性下限(rerank 分数),低于则拒答
+  gate_enabled: true                    # 灰区语义门控:rerank 分数在 [min, gate_threshold) 时再判一次"证据是否真能回答该问题"
+  gate_threshold: 0.6                   # 灰区上界;分高于此直接生成(域内高分题不触发,零额外成本/延迟)
 
 # ---- 观测日志(约束 7:轻量可观测)----
 logging:

@@ -152,3 +152,113 @@ def test_evidence_block_contains_metadata(tmp_path: Path) -> None:
     assert "d1_c0001" in user
     assert "Methods" in user
     store.close()
+
+
+# ---------------------------------------------------------------------------
+# 灰区语义门控(拒答增强,2026-09):rerank 分数落在 [min_relevance, gate_threshold)
+# 时,LLM 判一次"证据能否回答该问题";判不可答 → 拒答;判可答/解析失败 → 放行。
+# ---------------------------------------------------------------------------
+
+
+class ScriptedChat:
+    """按序返回预设文本,并记录每次调用的 messages(测门控分支与调用次数)。"""
+
+    def __init__(self, *texts: str):
+        self._texts = list(texts)
+        self.calls: list[list[dict]] = []
+
+    def chat(self, messages, **kwargs):
+        self.calls.append(messages)
+        text = self._texts.pop(0) if self._texts else "ok"
+        return ChatResult(
+            text=text,
+            model="fake",
+            prompt_tokens=10,
+            completion_tokens=5,
+            cache_hit_tokens=0,
+        )
+
+
+def _grey() -> list[RetrievedChunk]:
+    """灰区证据:rerank 分数 0.5(落在 [0.3, 0.6)),内容与问题不相关。"""
+    c = _ctx()[0]
+    c.score = 0.5
+    c.text = "讨论 Python 打包与依赖管理的通用说明,与问题主题无关。"
+    return [c]
+
+
+def test_gate_rejects_grey_area(tmp_path: Path) -> None:
+    """灰区 + 判定"不可答" → 拒答;门控调用后不再走生成(仅 1 次 chat)。"""
+    store = SQLiteStore(tmp_path / "db.sqlite")
+    fake = ScriptedChat('{"answerable": false, "reason": "证据与问题仅语义沾边"}')
+    rag = DirectRAG(fake, store)  # type: ignore[arg-type]
+    out = rag.answer(_prepared(), RetrievalOutput(context=_grey(), candidates=_grey()))
+    assert out.refused is True
+    assert "语义沾边" in out.answer
+    assert out.trace.get("gate") == "rejected"
+    assert len(fake.calls) == 1  # 只做门控判定,未进入生成
+    store.close()
+
+
+def test_gate_passes_when_answerable(tmp_path: Path) -> None:
+    """灰区 + 判定"可答" → 继续生成带引用;门控调用 + 生成调用共 2 次。"""
+    store = SQLiteStore(tmp_path / "db.sqlite")
+    _doc(store, "d1", "FastAPI Reference", "Official Docs")
+    fake = ScriptedChat(
+        '{"answerable": true, "reason": "证据直接说明该机制"}', "依赖注入说明[1]。"
+    )
+    rag = DirectRAG(fake, store)  # type: ignore[arg-type]
+    out = rag.answer(_prepared(), RetrievalOutput(context=_grey(), candidates=_grey()))
+    assert out.refused is False
+    assert len(out.citations) == 1
+    assert out.trace.get("gate") == "passed"
+    assert len(fake.calls) == 2
+    store.close()
+
+
+def test_gate_not_triggered_when_high_score(tmp_path: Path) -> None:
+    """rerank 高分(≥ gate_threshold)→ 不触发门控,只做 1 次生成调用。"""
+    store = SQLiteStore(tmp_path / "db.sqlite")
+    fake = ScriptedChat("高分证据正常回答[1]。")
+    rag = DirectRAG(fake, store)  # type: ignore[arg-type]
+    out = rag.answer(_prepared(), RetrievalOutput(context=_ctx(), candidates=_ctx()))
+    assert out.refused is False
+    assert len(fake.calls) == 1  # 无门控调用
+    assert "gate" not in out.trace
+    store.close()
+
+
+def test_gate_unparsed_falls_back_to_generation(tmp_path: Path) -> None:
+    """门控输出无法解析(非 JSON)→ 保守放行走原生成,不新增误伤。"""
+    store = SQLiteStore(tmp_path / "db.sqlite")
+    fake = ScriptedChat("抱歉我没看懂证据格式。", "生成兜底回答[1]。")
+    rag = DirectRAG(fake, store)  # type: ignore[arg-type]
+    out = rag.answer(_prepared(), RetrievalOutput(context=_grey(), candidates=_grey()))
+    assert out.refused is False
+    assert out.trace.get("gate") == "unparsed"
+    assert len(fake.calls) == 2
+    store.close()
+
+
+def test_gate_disabled_runs_generation_directly(tmp_path: Path) -> None:
+    """gate_enabled=False → 灰区也不触发门控,直接生成(1 次调用)。"""
+    store = SQLiteStore(tmp_path / "db.sqlite")
+    fake = ScriptedChat("直接生成回答。")
+    rag = DirectRAG(fake, store, gate_enabled=False)  # type: ignore[arg-type]
+    out = rag.answer(_prepared(), RetrievalOutput(context=_grey(), candidates=_grey()))
+    assert out.refused is False
+    assert len(fake.calls) == 1
+    store.close()
+
+
+def test_gate_below_min_relevance_still_refused_by_second_gate(tmp_path: Path) -> None:
+    """分数 < min_relevance(0.3)→ 走原第二道闸直接拒答,不触发门控。"""
+    store = SQLiteStore(tmp_path / "db.sqlite")
+    fake = ScriptedChat('{"answerable": false, "reason": "unused"}')
+    rag = DirectRAG(fake, store)  # type: ignore[arg-type]
+    low = [_chunk_low()]
+    out = rag.answer(_prepared(), RetrievalOutput(context=low, candidates=low))
+    assert out.refused is True
+    assert "相关性不足" in out.answer  # 第二道闸文案
+    assert len(fake.calls) == 0  # 未触发门控
+    store.close()

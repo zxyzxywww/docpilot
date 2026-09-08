@@ -43,6 +43,17 @@ EVIDENCE_TEMPLATE = (
     "章节:{section} | 段落:{paragraph} | chunk:{chunk_id}\n{text}"
 )
 
+# 灰区语义门控(拒答增强):rerank 分数不足以直接信任(灰区)时,用一次轻量判定
+# 确认"检索证据是否真的能回答该问题"。语义沾边型库外问题 rerank 分常落在灰区,
+# 直接生成会顺着沾边证据硬答 → 此处提前拦截。判定失败(None)时保守放行走原生成。
+GATE_SYSTEM_PROMPT = (
+    "你是问答质检器。给定用户问题与若干【检索证据】段落(来自 Python 后端官方开发文档),"
+    "判断这些证据是否足以可靠回答该问题。只输出 JSON,不要多余文字:"
+    '{"answerable": true 或 false, "reason": "一句话理由"}\n'
+    "判定标准:证据必须与问题主题实质相关、能支撑结论;若证据只是语义沾边"
+    "(提到同类技术词但答非所问)或明显无关,answerable 必须为 false。"
+)
+
 
 @dataclass
 class Citation:
@@ -71,10 +82,19 @@ class RagAnswer:
 class DirectRAG:
     """直接 RAG:单跳简单问题走此路径(复杂问题阶段四交给 Agent)。"""
 
-    def __init__(self, chat: ChatClient, sqlite: SQLiteStore, min_relevance_score: float = 0.3):
+    def __init__(
+        self,
+        chat: ChatClient,
+        sqlite: SQLiteStore,
+        min_relevance_score: float = 0.3,
+        gate_enabled: bool = True,
+        gate_threshold: float = 0.6,
+    ):
         self._chat = chat
         self._sqlite = sqlite
         self._min_relevance = min_relevance_score
+        self._gate_enabled = gate_enabled
+        self._gate_threshold = gate_threshold
         self._doc_cache: dict[str, dict] = {}
 
     def answer(self, prepared: PreparedQuery, retrieval: RetrievalOutput) -> RagAnswer:
@@ -88,12 +108,31 @@ class DirectRAG:
 
         # 证据相关性预检(rerank 分数过低 → 证据不足,防硬答)
         scores = [c.score for c in context]
-        if max(scores) < self._min_relevance:
+        max_rel = max(scores)
+        if max_rel < self._min_relevance:
             return RagAnswer(
                 answer="检索到的文献证据与问题相关性不足,无法可靠回答(证据不足)。",
                 refused=True,
-                trace={"evidence_chunks": len(context), "max_relevance": round(max(scores), 4)},
+                trace={"evidence_chunks": len(context), "max_relevance": round(max_rel, 4)},
             )
+
+        # 灰区语义门控(拒答增强):分数不足以直接信任 → 再判一次"证据能否回答该问题"。
+        # 语义沾边型库外问题 rerank 分常落在 [min_relevance, gate_threshold),直接生成
+        # 会顺着沾边证据硬答;此门控把这类问题拦成拒答。只对灰区触发,域内高分题零开销。
+        gate_trace: dict[str, Any] = {}
+        if self._gate_enabled and self._min_relevance <= max_rel < self._gate_threshold:
+            unanswerable = self._gate_unanswerable(prepared.original_query, context)
+            if unanswerable is True:
+                return RagAnswer(
+                    answer="检索到的证据与问题仅语义沾边,不足以可靠回答(证据不足)。",
+                    refused=True,
+                    trace={
+                        "evidence_chunks": len(context),
+                        "max_relevance": round(max_rel, 4),
+                        "gate": "rejected",
+                    },
+                )
+            gate_trace["gate"] = "passed" if unanswerable is False else "unparsed"
 
         evidence_block = self._build_evidence_block(context)
         messages: list[ChatCompletionMessageParam] = [
@@ -112,8 +151,37 @@ class DirectRAG:
                 "completion_tokens": result.completion_tokens,
                 "cache_hit_tokens": result.cache_hit_tokens,
                 "estimated_cost_yuan": result.estimated_cost_yuan,
+                **gate_trace,
             },
         )
+
+    def _gate_unanswerable(
+        self, question: str, context: list[RetrievedChunk]
+    ) -> bool | None:
+        """灰区门控:证据与问题是否实质相关(LLM 判定,单次轻量调用)。
+
+        返回 True=证据不足以可靠回答(应拒答);False=证据可支撑回答;
+        模型未按格式输出(解析失败)返回 None → 调用方按"可答"放行,
+        保守不新增误伤(维持原有生成行为)。
+        """
+        lines = ["【检索证据(截断)】"]
+        for idx, chunk in enumerate(context[:4], start=1):
+            doc = self._doc_meta(chunk.document_id)
+            lines.append(
+                f"[{idx}] 标题:{doc.get('title', '')} | 来源:{chunk.source_url}\n"
+                f"{chunk.text[:400]}"
+            )
+        resp = self._chat.chat(
+            [
+                {"role": "system", "content": GATE_SYSTEM_PROMPT},
+                {"role": "user", "content": f"{question}\n\n" + "\n".join(lines)},
+            ],
+            max_tokens=200,
+        )
+        m = re.search(r'"answerable"\s*:\s*(true|false)', resp.text, re.IGNORECASE)
+        if m is None:
+            return None
+        return m.group(1).lower() == "false"
 
     # ------------------------------------------------------------ 内部
 

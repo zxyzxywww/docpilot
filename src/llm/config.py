@@ -94,6 +94,8 @@ class AgentConfig(BaseModel):
 
 class RagConfig(BaseModel):
     min_relevance_score: float = 0.3  # 检索证据相关性下限(rerank 分数),低于则拒答
+    gate_enabled: bool = True  # 灰区语义门控开关(rerank 分数落在灰区时 LLM 判定是否可答)
+    gate_threshold: float = 0.6  # 灰区上界:分数低于此才触发门控;高于直接生成(零额外成本)
 
 
 class AppConfig(BaseModel):

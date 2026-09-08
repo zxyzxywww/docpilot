@@ -62,7 +62,9 @@ class FakeEmbedder:
 
 class FakePreprocessor:
     def prepare(self, q):
-        return PreparedQuery(original_query=q, translated_query="fastapi routing", expanded_terms=[])
+        return PreparedQuery(
+            original_query=q, translated_query="fastapi routing", expanded_terms=[]
+        )
 
 
 def _ctx(tmp_path: Path) -> ToolContext:
