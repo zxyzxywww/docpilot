@@ -48,6 +48,10 @@ export function getRun(runId: string): Promise<RunInfo> {
   return request<RunInfo>(`/api/runs/${runId}`);
 }
 
+export function getSessionRuns(sessionId: string): Promise<RunInfo[]> {
+  return request<RunInfo[]>(`/api/sessions/${sessionId}/runs`);
+}
+
 /** 刷新后恢复:所有仍 pending/running 的任务 */
 export function getActiveRuns(): Promise<RunInfo[]> {
   return request<RunInfo[]>("/api/runs/active");

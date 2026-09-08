@@ -11,6 +11,7 @@ import {
   getActiveRuns,
   getMessages,
   getRun,
+  getSessionRuns,
   listSessions,
   patchSessionMode,
 } from "@/lib/api";
@@ -86,8 +87,16 @@ export function ChatUI() {
         if (urlSession && list.some((s) => s.session_id === urlSession)) {
           setActiveId(urlSession);
           const history = await getMessages(urlSession);
+          const runs = await getSessionRuns(urlSession);
+          const lastFail = runs.find((r) => r.status === "failed");
           if (!cancelled) {
             setBySession((prev) => ({ ...prev, [urlSession]: history }));
+            if (lastFail) {
+              setErrBySession((prev) => ({
+                ...prev,
+                [urlSession]: lastFail.error ?? "该会话最近一次回答失败",
+              }));
+            }
           }
         }
       } catch {
@@ -157,6 +166,14 @@ export function ChatUI() {
     try {
       const history = await getMessages(id); // 以后端为唯一事实来源
       setBySession((prev) => ({ ...prev, [id]: history }));
+      const runs = await getSessionRuns(id);
+      const lastFail = runs.find((r) => r.status === "failed");
+      if (lastFail) {
+        setErrBySession((prev) => ({
+          ...prev,
+          [id]: lastFail.error ?? "该会话最近一次回答失败",
+        }));
+      }
     } catch (e) {
       setErrBySession((prev) => ({
         ...prev,

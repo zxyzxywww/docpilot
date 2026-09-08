@@ -84,7 +84,11 @@ def chat(req: ChatRequest) -> RunCreated:
     store = _get_store()
     if req.session_id and store.get_session(req.session_id) is None:
         raise HTTPException(status_code=404, detail="会话不存在")
-    session_id = req.session_id or store.create_session()["session_id"]
+    if req.session_id:
+        session_id = req.session_id
+    else:
+        # 新建会话:mode 会话级——继承本次所选模式(首问模式即该会话默认模式)
+        session_id = store.create_session(mode=req.mode)["session_id"]
 
     # 首条问题作为会话标题
     sess = store.get_session(session_id)
