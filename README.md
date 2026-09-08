@@ -87,7 +87,7 @@ mypy src
 python scripts/chat.py
 ```
 
-> 若你已安装 uv(其他机器),也可以用 `uv sync --all-groups` 管理,命令等效。
+> 若你在其他机器使用 uv 管理,命令与 pip/conda 等效。
 
 ### HTTP API server(新架构,前后端分离的前端依赖它)
 
@@ -250,9 +250,9 @@ python scripts/query.py --verbose "问题"   # 显示完整引用与观测详情
 ### Agent 工具(全部 Pydantic 参数校验)
 | 工具 | 作用 |
 |---|---|
-| `search_literature` | 检索医学文献库,返回带来源的证据段落 |
-| `summarize_paper` | 定位并总结某篇论文(仅基于库内证据) |
-| `get_citation` | 为论断检索支撑证据,返回可溯源引用 |
+| `search_literature` | 检索官方开发文档库(FastAPI/Pydantic/SQLAlchemy/Python),返回带来源的证据段落(工具名沿用历史,逻辑面向文档库) |
+| `summarize_paper` | 定位并总结某篇官方文档页的核心用法(仅基于库内证据) |
+| `get_citation` | 为论断检索支撑证据,返回可溯源引用(链接官方文档页) |
 
 ### Agent 护栏(config.yaml `agent` 段,全部可配置)
 - `max_steps`:循环最大步数;`tool_timeout_seconds`:工具超时;
@@ -262,7 +262,7 @@ python scripts/query.py --verbose "问题"   # 显示完整引用与观测详情
 ### Agent 用法
 
 ```bash
-python scripts/query.py --mode agentic "比较GAN和扩散模型在合成CT生成上的差异"
+python scripts/query.py --mode agentic "怎么给 FastAPI 接口加 JWT 登录后再实现文件上传?"
 python scripts/query.py --mode auto "任意问题"        # 自动路由
 ```
 
@@ -280,17 +280,20 @@ python scripts/query.py --mode auto "任意问题"        # 自动路由
 - **生成**:无证据拒答率 / 引用完整率 / 引用准确率 / 完整性 —— 衡量"答得对、有据可查";
 - LLM-as-judge(正确性/忠实度)仅作辅助,最终以人工核验为准。
 
-### 评估结果(2026-08,test 集 30 条,direct_rag)
+### 评估结果(2026-09,test 集 30 条,direct_rag,DocPilot 开发文档域首轮基线)
 
-| 指标 | Baseline | 调参后 | 说明 |
-|---|---|---|---|
-| Recall@5 | 0.9545 | 0.9545 | 检索召回稳定 |
-| MRR | 0.8500 | **0.9030** | 首条相关证据位置提前 |
-| nDCG@10 | 0.8866 | **0.9261** | 排序质量提升 |
-| 引用准确率 | 0.6280 | **0.7742** | 引用的证据更精准(相关性预检) |
-| 引用完整率 | 1.0 | 1.0 | 全部回答带引用 |
-| 无证据拒答率 | 0.50 | 0.50 | 库外事实型全部拒答;语义沾边型为已知难点 |
-| 平均费用 | 0.0066 元/问 | **0.0057 元/问** | 前缀缓存 + 精简上下文 |
+| 指标 | 数值 | 说明 |
+|---|---|---|
+| Recall@5 / @10 | 0.727 / 0.818 | 官方文档段落召回 |
+| MRR | 0.624 | 首个相关段落位次(文档段落碎片化,低于医学域 0.90,见口径说明) |
+| nDCG@10 | 0.671 | 排序质量 |
+| 引用完整率 | 0.955 | 回答全部带可溯源引用 |
+| 无答案拒答率 | 0.375 | 语义沾边型库外问题为已知难点 |
+| 平均费用 | 0.0046 元/问 | test 全量 30 条共 0.137 元 |
+
+**评估口径与实验记录**:开发文档段落短碎、回答合理引用多个 chunk,而 gold 仅记 1 个 chunk,
+引用类指标被稀释(检索 Recall 说明证据可达);`final_context_k` 6→8 实验更差已回滚至 6;
+评估集 `data/eval/dataset.jsonl` 40 条(dev10/test30,20% 无答案,按文档划分)。
 
 **调参动作**:引入"证据相关性预检"(config `rag.min_relevance_score`,rerank 分数低于阈值直接拒答)+ 精简检索上下文。
 
