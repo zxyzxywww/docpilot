@@ -73,14 +73,17 @@ conda create -n docpilot python=3.12 -y
 conda activate docpilot
 
 # 2. 安装依赖(与 pyproject.toml 对齐)
-pip install openai pydantic python-dotenv pyyaml httpx qdrant-client pypdf pytest pytest-mock ruff mypy pygments
+pip install openai pydantic python-dotenv pyyaml httpx qdrant-client pypdf pytest pytest-mock ruff mypy pygments fastapi uvicorn python-multipart
+
+# 前端依赖(web/ 目录,Node 18+)
+cd web && npm install && cd ..
 
 # 3. 运行测试(离线 mock,零真实 API 调用)
 pytest
 
 # 4. 质量检查
 ruff check .
-mypy src
+mypy
 
 # 5. 对话测试(需要真实 DEEPSEEK_API_KEY,先 cp .env.example .env 并填入)
 python scripts/chat.py
@@ -101,11 +104,16 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 
 | 端点 | 说明 |
 |---|---|
-| `POST /api/chat` | 问答 `{question, mode, session_id?}` → 回答 + 引用 + 6 步 RAG 报告 |
-| `GET/POST/DELETE /api/sessions[/id]` | 会话持久化(历史会话列表数据源) |
+| `POST /api/chat` | **异步**:立即落 user 消息 + 建 run(pending),返回 `{session_id, run_id}`;回答由后台线程执行后写回 |
+| `GET /api/runs/{run_id}` | 轮询任务状态(pending/running/done/failed) |
+| `GET /api/runs/active` | 全部进行中任务(刷新后恢复 running 用) |
+| `GET /api/sessions/{id}/runs` | 某会话的历史任务(失败提示数据源) |
+| `POST /api/sessions` | 新建会话(默认 title/mode) |
+| `PATCH /api/sessions/{id}` | 更新会话(mode: auto/direct/agentic 持久化) |
+| `GET/DELETE /api/sessions[/id]` | 会话列表/删除(级联删消息与 run) |
 | `GET /api/sessions/{id}/messages` | 会话内消息(含引用与 RAG 报告) |
 | `GET /api/documents`、`DELETE /api/documents/{id}` | 文档库列表/删除 |
-| `POST /api/documents/upload` | 上传 XML/PDF 入库(类型/大小/路径安全校验) |
+| `POST /api/documents/upload` | 上传 XML/PDF/HTML 入库(类型/大小/路径安全校验) |
 | `GET /api/stats` | 语料统计与检索/分块配置 |
 | `GET /api/eval/summary` | 评估指标与优化前后对比(读 `data/eval/eval_report.json`) |
 
@@ -116,7 +124,7 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 - `pytest`:离线 mock 测试,默认**不**调用任何真实付费 API
 - `pytest -m integration`:真实 API 集成测试,需 `.env` 配置 key 后手动运行
 - `ruff check .`:lint
-- `mypy src`:类型检查
+- `mypy`:类型检查
 - GitHub Actions CI(`.github/workflows/ci.yml`):仅运行离线 mock 测试,不调付费 API
 
 ## 成本预算(学生友好)
@@ -140,17 +148,19 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 | 三 | 双通道检索 + direct_rag + 观测日志 + 注入防护 | ✅ 已完成(已验收) |
 | 四 | 手写 ReAct Agent + agentic_rag + 护栏 | ✅ 已完成(已验收) |
 | 五 | 评估体系 + direct/agentic 对比 + 调参 | ✅ 已完成(已验收) |
-| 六 | 前端产品化(Next.js 三页)+ API 层 + Docker 三服务交付 | ✅ 已完成(已验收,实机验证) |
+| 六 | 前端产品化(Next.js 三页)+ API 层 + Docker 三服务交付 + 会话/任务异步持久化(run 轮询/刷新恢复/会话级 mode) | ✅ 已完成(已验收,真机 A~H 38 断言) |
 
 每阶段完成:更新本 README → 输出 Git diff 摘要 → **人工验收通过后**才进入下一阶段。
 
-## 数据管道(阶段二)
+## 数据管道(阶段二;当前数据域 = Python 后端官方开发文档 HTML)
 
 ```
-PMC OA 文献(JATS XML)                      合规:仅开放许可,不碰版权不明 PDF
-   │  scripts/fetch_pmc.py                  manifest.jsonl(document_id/sha256/license/...)
+官方开发文档网页(白名单域名:fastapi.tiangolo.com / pydantic.dev /
+  sqlalchemy.org / docs.python.org 等)
+   │  scripts/fetch_dev_docs.py 抓取 + scripts/rebuild_docs.py 归一化
+   │  manifest.jsonl(document_id=sha1(url)[:12] / source_url / sha / domain)
    ▼
-解析器 src/ingest/parser.py                XML 优先(排除参考文献),PDF 通用(扫描件报错)
+解析器 src/ingest/parser.py(HTMLDocParser)   正文容器定位;pre/code 独立成段 → 代码块可检索
    ▼
 分块器 src/ingest/chunker.py               600/100 token,与段落对齐,确定性 chunk_id
    ▼
@@ -160,12 +170,14 @@ embedding(SiliconFlow BAAI/bge-m3,1024 维)
    │  状态机:pending → indexing → ready / failed / deleted
    │  三存储数量校验通过才标记 ready;失败可重试
    ▼
-scripts/ingest.py(入库)/ scripts/reindex.py(重建派生索引)
+scripts/reindex.py(重建派生索引,确定性);XML/PDF 解析器保留(上传自定义文档兼容)
 ```
 
 - **SQLite 是唯一事实来源**,Qdrant 与 BM25 均为可重建派生索引(`reindex.py` 按 SQLite + manifest + 原始文档确定性重建)
 - 更换 embedding 模型 / 维度 / 分块策略 → 必须重建索引(维度不匹配时 QdrantStore 直接报错)
-当前语料:Python 后端官方开发文档(FastAPI 50 / Pydantic 12 / SQLAlchemy 16 / Python 20,97 页 / 12170 chunks)
+- 当前语料:官方开发文档 **96 页 / 12170 chunks**,分布 FastAPI 50 / Pydantic 12 / SQLAlchemy 14 / Python 20
+  (SQLAlchemy 曾有两张 >800KB 参考页 embedding 稳定超时,已剔除并同步口径;Qdrant 集合 `docpilot_chunks` points 与 SQLite chunk 数一致)
+- 历史注:阶段二原语料为医学文献(JATS XML/PDF),2026-09 换域时由 fetch_dev_docs/rebuild_docs 重建为官方开发文档;检索/存储/Agent 核心零改动(见 git 历史)
 
 ## 免责声明
 
@@ -213,7 +225,7 @@ DocPilot 仅面向 Python 后端开发的技术文档问答(检索范围为已�
 ### L5 引用溯源与防幻觉
 - prompt 强制 [n] 标注,且只允许引用检索证据中的编号;
 - 解析阶段丢弃越界编号(模型编造的 [99] 直接删除);
-- 引用携带完整信息(标题/期刊/章节/段落/chunk_id/证据原文),供 UI 点击溯源。
+- 引用携带完整信息(来源/标题/章节/段落/chunk_id/证据原文/官方链接),供 UI 点击溯源。
 - 代码:`src/rag/direct.py`。
 
 ### L6 提示注入防护
@@ -315,6 +327,18 @@ python scripts/evaluate.py --split test --judge    # 附加 LLM-as-judge
 python scripts/evaluate.py --compare-agentic       # direct vs agentic 对比
 ```
 
+## 会话与任务生命周期(2026-09 异步可靠化)
+
+一次问答 = 会话(Session)→ 消息(Message)→ 任务(Run)三层,全部以 SQLite 为唯一事实来源:
+
+- **发送即持久化**:`POST /api/chat` 毫秒级落 user 消息 + 建 run(pending),返回 `{session_id, run_id}`;
+- **后台执行**:`server/task_runner.py` 线程池(2 worker)跑 RAG/Agent(direct/agentic),完成后写回 assistant、run 置 done/failed(failed 的 error 落库);
+- **前端投影**:1.2s 轮询 `GET /api/runs/{id}`,done 后重拉该会话全量消息;回答中切走/刷新均不丢;
+- **刷新恢复**:URL `?session=` 记忆当前会话 + `GET /api/runs/active` 恢复 running 并续轮询;
+- **mode 会话级**:`chat_sessions.mode`(auto/direct/agentic)持久化,新建会话继承首问所选,可 PATCH 修改;
+- **失败可见**:run failed → 页面明确显示原因,user 消息与会话保留(不消失)。
+- **已知边界**:暂无"停止任务"端点(状态机已含 stopped,未接 UI);页面彻底关闭后无推送(任务仍会完成落库,下次打开可见)。
+
 ## Web 界面与部署(阶段六,前后端分离架构)
 
 架构:浏览器 → `web/`(Next.js 前端,端口 3000)→ `server/`(FastAPI,端口 8000)
@@ -329,13 +353,13 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 npm run dev   # 打开 http://localhost:3000
 ```
 
-功能:Chat 页(会话列表 / Markdown 回答 + 引用卡片溯源 / 右侧 RAG 执行链路 6 步)、
+功能:Chat 页(会话列表 / Markdown 回答 + 引用卡片溯源 / 右侧 RAG 执行链路 6 步;发送即建会话、回答中可切走/刷新不丢、URL ?session= 记忆、mode 会话级持久化)、
 Knowledge Base 页(文档管理 + 上传 XML/PDF ≤20MB + 配置展示)、Evaluation 页
 (指标卡 + 调参前后对比)。后端交互文档 http://localhost:8000/docs。
 
 ### Docker 部署(本地一键启动,已实机验证)
 
-> 已在 Windows + Docker Desktop 实机验证通过(2026-09,三服务 qdrant + api + web)。
+> 已在 Windows + Docker Desktop 实机验证通过(2026-09):三服务 qdrant + api + web 全健康(api/qdrant healthcheck 200),会话生命周期经 playwright + 真机 Edge A~H 38 断言全绿(新建/发送/回答中切走/刷新恢复/历史完整性/mode 持久化/draft 无垃圾/失败恢复)。
 
 ```bash
 # 0. 国内网络首次拉镜像慢:已配置镜像加速器 docker.m.daocloud.io(~/.docker/daemon.json)
@@ -346,8 +370,8 @@ docker compose up -d qdrant
 python scripts/reindex.py
 # 4. 构建并启动全部服务(API key 走环境变量或 .env,不写入镜像)
 docker compose up --build -d
-# 5. 浏览器打开 http://localhost:3000;验证:curl http://localhost:3000/_stcore/health 无此接口,
-#    用 curl http://localhost:8000/api/health 验证后端
+# 5. 浏览器打开 http://localhost:3000;验证:curl http://localhost:8000/api/health → {"status":"ok"};
+#    Qdrant:curl http://localhost:6333/healthz → healthz check passed
 ```
 
 部署要点(实机验证踩坑记录):
