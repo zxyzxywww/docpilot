@@ -125,8 +125,8 @@ export default function KnowledgeBasePage() {
         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="已收录文档" value={stats ? String(readyCount) : undefined} sub="ready" />
           <StatCard label="文本块 (chunk)" value={stats ? String(totalChunks) : undefined} sub="已向量化" />
-          <StatCard label="Embedding 模型" value={stats?.embedding_model ?? undefined} sub={`${stats?.embedding_dimension ?? "–"} 维`} />
-          <StatCard label="重排模型" value={stats?.rerank_model ?? undefined} sub="Rerank" />
+          <StatCard label="Embedding 模型" value={stats?.embedding_model ?? undefined} sub={`${stats?.embedding_dimension ?? "–"} 维`} wrap />
+          <StatCard label="重排模型" value={stats?.rerank_model ?? undefined} sub="Rerank" wrap />
         </div>
 
         {/* 上传 */}
@@ -251,12 +251,31 @@ export default function KnowledgeBasePage() {
   );
 }
 
-function StatCard({ label, value, sub }: { label: string; value?: string; sub?: string }) {
+function StatCard({
+  label,
+  value,
+  sub,
+  wrap = false,
+}: {
+  label: string;
+  value?: string;
+  sub?: string;
+  /** 长文本(如模型名)时用较小字号并完整换行显示,避免 truncate 截断 */
+  wrap?: boolean;
+}) {
   return (
     <Card>
       <CardContent className="py-3.5">
         <div className="text-[12px] text-neutral-400">{label}</div>
-        <div className="mt-0.5 truncate font-mono text-[20px] font-medium tracking-tight text-neutral-900">
+        <div
+          title={value}
+          className={cn(
+            "mt-0.5 font-mono font-medium tracking-tight text-neutral-900",
+            wrap
+              ? "break-all text-[12px] leading-snug"
+              : "truncate text-[20px]",
+          )}
+        >
           {value ?? "—"}
         </div>
         {sub && <div className="text-[11px] text-neutral-300">{sub}</div>}
