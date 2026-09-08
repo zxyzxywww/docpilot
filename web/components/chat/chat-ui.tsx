@@ -31,6 +31,7 @@ export function ChatUI() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -49,14 +50,20 @@ export function ChatUI() {
   }, [messages, loading]);
 
   const newChat = () => {
+    // 新建/回到"空白草稿会话":只重置本地状态,不创建数据库记录
+    // (首条消息发送时才由后端真正建会话,避免空会话垃圾);
+    // 输入框聚焦给出即时反馈(欢迎态下点按钮也有可见响应)。
     setActiveId(null);
     setMessages([]);
+    setInput("");
     setError(null);
+    inputRef.current?.focus();
   };
 
   const selectSession = async (id: string) => {
     setActiveId(id);
     setError(null);
+    setInput(""); // 切换会话时清掉上一个 draft,避免误发
     try {
       const msgs = await getMessages(id);
       // user 消息 content 原样;assistant 消息恢复 citations/report
@@ -160,6 +167,7 @@ export function ChatUI() {
           <div className="mx-auto max-w-3xl">
             <div className="flex items-end gap-2 rounded-xl border border-neutral-200 bg-white p-2 shadow-sm focus-within:border-neutral-400">
               <textarea
+                ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
