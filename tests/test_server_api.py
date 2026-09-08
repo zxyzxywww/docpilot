@@ -175,3 +175,33 @@ def test_eval_summary(client: TestClient, fake_service) -> None:
     body = client.get("/api/eval/summary").json()
     # 测试运行于项目根(存在真实 eval_report.json)
     assert "available" in body
+
+
+def test_upload_html_accepted(client: TestClient, fake_service, monkeypatch) -> None:
+    """修复 A1:HTML 上传应通过类型白名单并走 HTMLDocParser 路径。"""
+    from types import SimpleNamespace as NS
+
+    # fake service 补齐上传路径所需成员
+    fake_service.qdrant = NS()
+    fake_service.bm25 = NS()
+    fake_service.embedder = NS()
+
+    class FakeHTMLParser:
+        def parse(self, data, doc_id, source_url=""):
+            return NS(title="Test Page", paragraphs=[{"section": "s"}])
+
+    class FakeIngest:
+        def __init__(self, *a, **kw):
+            pass
+
+        def ingest_one(self, rec):
+            return {"ok": True, "document_id": rec["document_id"], "chunks": 1}
+
+    monkeypatch.setattr(main_mod, "HTMLDocParser", FakeHTMLParser)
+    monkeypatch.setattr(main_mod, "IngestService", FakeIngest)
+    resp = client.post(
+        "/api/documents/upload",
+        files={"file": ("doc.html", b"<html><body><h1>T</h1><p>x</p></body></html>", "text/html")},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["ok"] is True

@@ -149,7 +149,7 @@ export default function KnowledgeBasePage() {
               <input
                 ref={fileRef}
                 type="file"
-                accept=".xml,.pdf"
+                accept=".xml,.pdf,.html,.htm"
                 className="hidden"
                 onChange={(e) => onUpload(e.target.files?.[0])}
               />

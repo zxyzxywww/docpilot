@@ -21,7 +21,7 @@ for _p in (_PROJECT_ROOT, _PROJECT_ROOT / "src", _PROJECT_ROOT / "server"):
 from fastapi import FastAPI, HTTPException, UploadFile  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
-from ingest import IngestService, PDFParser, XMLParser  # noqa: E402
+from ingest import HTMLDocParser, IngestService, PDFParser, XMLParser  # noqa: E402
 from ingest.parser import ScannedPDFError  # noqa: E402
 
 from .rag_service import RagEngine, run_chat  # noqa: E402
@@ -36,7 +36,7 @@ from .schemas import (  # noqa: E402
 from .service_runtime import Service  # noqa: E402
 from .session_store import SessionStore  # noqa: E402
 
-ALLOWED_SUFFIXES = {".xml", ".pdf"}
+ALLOWED_SUFFIXES = {".xml", ".pdf", ".html", ".htm"}
 MAX_UPLOAD_MB = 20
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
@@ -216,6 +216,8 @@ async def upload_document(file: UploadFile) -> dict[str, Any]:
             path.write_bytes(data)
             if suffix == ".xml":
                 parsed = XMLParser().parse(path.read_bytes(), doc_id, source_url="")
+            elif suffix in (".html", ".htm"):
+                parsed = HTMLDocParser().parse(path.read_bytes(), doc_id, source_url="")
             else:
                 try:
                     parsed = PDFParser().parse(str(path), doc_id, source_url="")
