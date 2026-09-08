@@ -1,6 +1,7 @@
-"""DocPilot:重建开发文档语料(清空医学旧语料 → 入库官方开发文档 HTML)。
+"""DocPilot:重建开发文档语料(清空旧语料后,重新入库
+FastAPI/Pydantic/SQLAlchemy/Python 官方开发文档 HTML)。
 
-适用:DocPilot 数据域迁移(医学文献 → Python 后端官方开发文档)。
+适用:DocPilot 数据域重建/换库;早期数据域迁移的演进说明见 README 历史章节。
 
 流程:
     1) wipe:清空 SQLite documents/chunks + Qdrant collection(事实来源与派生索引同步);

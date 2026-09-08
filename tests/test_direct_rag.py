@@ -48,7 +48,7 @@ def _ctx() -> list[RetrievedChunk]:
             section="Methods",
             page="",
             paragraph=2,
-            text="synthetic CT generation uses deep learning.",
+            text="fastapi routing generation uses deep learning.",
             source_url="https://example.org/PMC1",
             score=0.9,
         ),
@@ -69,7 +69,7 @@ def _prepared() -> PreparedQuery:
     return PreparedQuery(
         original_query="磁共振到CT合成用什么方法?",
         translated_query="methods for MR-to-CT synthesis",
-        expanded_terms=["synthetic CT"],
+        expanded_terms=["fastapi routing"],
     )
 
 
@@ -101,8 +101,8 @@ def _chunk_low() -> RetrievedChunk:
 
 def test_answer_parses_citations(tmp_path: Path) -> None:
     store = SQLiteStore(tmp_path / "db.sqlite")
-    _doc(store, "d1", "Synthetic CT Paper", "Medical Physics")
-    _doc(store, "d2", "Diffusion Paper", "MRM")
+    _doc(store, "d1", "FastAPI Reference", "Official Docs")
+    _doc(store, "d2", "Pydantic User Guide", "Official Docs")
     fake = FakeChat("扩散模型效果好[1][2]。")
     rag = DirectRAG(fake, store)  # type: ignore[arg-type]
     out = rag.answer(_prepared(), RetrievalOutput(context=_ctx(), candidates=_ctx()))
@@ -110,8 +110,8 @@ def test_answer_parses_citations(tmp_path: Path) -> None:
     assert len(out.citations) == 2
     c1 = out.citations[0]
     assert c1.index == 1 and c1.chunk_id == "d1_c0001"
-    assert c1.title == "Synthetic CT Paper"
-    assert c1.journal == "Medical Physics"
+    assert c1.title == "FastAPI Reference"
+    assert c1.journal == "Official Docs"
     assert "deep learning" in c1.evidence
     store.close()
 
@@ -143,12 +143,12 @@ def test_injection_guard_present_in_system_prompt(tmp_path: Path) -> None:
 def test_evidence_block_contains_metadata(tmp_path: Path) -> None:
     """证据块必须携带完整溯源信息(标题/章节/chunk_id),引用才能点击溯源。"""
     store = SQLiteStore(tmp_path / "db.sqlite")
-    _doc(store, "d1", "Synthetic CT Paper")
+    _doc(store, "d1", "FastAPI Reference")
     fake = FakeChat("ok")
     rag = DirectRAG(fake, store)  # type: ignore[arg-type]
     rag.answer(_prepared(), RetrievalOutput(context=_ctx(), candidates=_ctx()))
     user = fake.last_messages[1]["content"]
-    assert "Synthetic CT Paper" in user
+    assert "FastAPI Reference" in user
     assert "d1_c0001" in user
     assert "Methods" in user
     store.close()

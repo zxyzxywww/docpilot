@@ -45,7 +45,7 @@ class FakePipeline:
                     section="Intro",
                     page="",
                     paragraph=1,
-                    text="synthetic CT generation uses deep learning.",
+                    text="fastapi routing generation uses deep learning.",
                     source_url="https://example.org/PMC1",
                 )
             ],
@@ -62,13 +62,13 @@ class FakeEmbedder:
 
 class FakePreprocessor:
     def prepare(self, q):
-        return PreparedQuery(original_query=q, translated_query="synthetic CT", expanded_terms=[])
+        return PreparedQuery(original_query=q, translated_query="fastapi routing", expanded_terms=[])
 
 
 def _ctx(tmp_path: Path) -> ToolContext:
     sqlite = SQLiteStore(tmp_path / "db.sqlite")
     sqlite.upsert_document(
-        {"document_id": "d1", "title": "Synthetic CT Paper", "journal": "Medical Physics"},
+        {"document_id": "d1", "title": "FastAPI Reference", "journal": "Official Docs"},
         status="ready",
     )
     return ToolContext(
@@ -138,7 +138,7 @@ def test_loop_tool_then_final(tmp_path: Path) -> None:
     chat = FakeChat(
         [
             "Thought: 需要检索\nAction: search_docs\n"
-            'Action Input: {"question": "synthetic CT methods", "top_k": 3}',
+            'Action Input: {"question": "fastapi routing methods", "top_k": 3}',
             "Thought: 已有证据\nFinal Answer: 合成CT用深度学习[1]。",
         ]
     )
@@ -149,7 +149,7 @@ def test_loop_tool_then_final(tmp_path: Path) -> None:
     assert len(answer.tool_trace) == 1
     assert answer.tool_trace[0]["tool"] == "search_docs"
     assert answer.citations  # 从检索证据构建引用
-    assert answer.citations[0].title == "Synthetic CT Paper"
+    assert answer.citations[0].title == "FastAPI Reference"
 
 
 def test_loop_unknown_tool_reports(tmp_path: Path) -> None:
@@ -170,7 +170,7 @@ def test_loop_repeat_action_stops(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     repeat = (
         "Thought: 再查一次\nAction: search_docs\n"
-        'Action Input: {"question": "synthetic CT"}'
+        'Action Input: {"question": "fastapi routing"}'
     )
     chat = FakeChat([repeat, repeat, "Thought: 结束\nFinal Answer: 完成。"])
     loop = AgentLoop(chat, ctx, _cfg(max_consecutive_repeat=2), ConversationMemory())  # type: ignore[arg-type]
@@ -182,7 +182,7 @@ def test_loop_max_steps_stops(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     action = (
         "Thought: 继续\nAction: search_docs\n"
-        'Action Input: {"question": "synthetic CT"}'
+        'Action Input: {"question": "fastapi routing"}'
     )
     chat = FakeChat([action, action, action, action])
     # 提高重复阈值,让"步数上限"先于"重复检测"触发

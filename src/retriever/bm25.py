@@ -10,8 +10,9 @@ from .types import RetrievedChunk
 class BM25Retriever:
     """稀疏(关键词)通道。
 
-    跨语言场景中,该通道使用"翻译后的英文查询 + 医学术语扩展"(而非原始
-    中文问题),因为 BM25 是字面匹配,中文词在英文文献里不会有命中。
+    中英混合场景中,该通道使用查询预处理产出的英文查询(translated_query +
+    技术术语扩展)执行字面匹配,而非原始中文问题:BM25 是字面匹配,
+    中文词在英文官方文档中不会有命中。
     """
 
     def __init__(self, bm25: BM25Index, sqlite: SQLiteStore):
