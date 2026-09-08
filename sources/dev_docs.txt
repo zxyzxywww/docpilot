@@ -69,8 +69,6 @@ https://docs.sqlalchemy.org/en/20/tutorial/data_select.html
 https://docs.sqlalchemy.org/en/20/tutorial/orm_data_manipulation.html
 https://docs.sqlalchemy.org/en/20/tutorial/orm_related_objects.html
 https://docs.sqlalchemy.org/en/20/core/engines.html
-https://docs.sqlalchemy.org/en/20/core/connections.html
-https://docs.sqlalchemy.org/en/20/core/metadata.html
 https://docs.sqlalchemy.org/en/20/core/reflection.html
 https://docs.sqlalchemy.org/en/20/orm/quickstart.html
 https://docs.sqlalchemy.org/en/20/orm/session_basics.html
