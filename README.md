@@ -1,25 +1,24 @@
 # DocPilot —— Python 后端开发文档问答 Agent
 
-> **2026-09 数据域迁移**:当前语料为 Python 后端官方开发文档(FastAPI/Pydantic/SQLAlchemy/Python,97 页 / 12170 chunks,web 入库)。
+> **2026-09 数据域迁移**:当前语料为 Python 后端官方开发文档(FastAPI/Pydantic/SQLAlchemy/Python,96 页 / 12170 chunks,web 入库)。
 > 早期"医学文献(MR-to-CT)"内容属项目演进历史,见 git 历史与旧章节;量化评估为 DocPilot 开发文档首轮基线。
 
-> 仅用于**公开医学文献检索与研究辅助**,不提供任何诊断、治疗或医疗决策建议。
-> 本项目是学习与简历项目,所有医学结论均须有真实检索证据与引用。
+> 本项目为学习与简历项目:仅基于**已入库的官方开发文档**(FastAPI/Pydantic/SQLAlchemy/Python)作答,不引入外部随意内容。
 
 ## MVP 定位红线(贯穿全项目)
 
 | 红线 | 说明 |
 |---|---|
-| 仅公开文献 | 只使用明确允许复用的 PMC Open Access 文献或明确开放指南,禁止处理真实患者隐私数据 |
-| 不提供医疗建议 | 不输出诊断、治疗或用药决策 |
+| 仅官方文档 | 只检索明确允许复用的官方技术文档(域名白名单抓取),不处理用户隐私数据 |
+| 不越界作答 | 不输出未经检索证据支持的 API 用法/版本结论 |
 | 证据不足必须拒答 | 检索不到可靠证据时明确回答"证据不足",不猜测 |
-| 引用溯源 | 重要医学结论必须附带真实检索到的证据与引用(标题/章节/页码/chunk_id/原文) |
+| 引用溯源 | 技术结论必须附带真实检索到的证据与引用(官方文档链接/章节/chunk_id/原文) |
 
 以上红线同时写入 system prompt 与 `config.yaml` 的 `mvp` 段,并由测试守护。
 
 ## 项目定位(2026-09 由医学文献域迁移为开发文档域)
 
-- **场景**:垂直医学文献 RAG + Agent(英文文献为主,支持中英文提问)
+- **场景**:面向 Python 后端开发的官方文档问答 Agent(英文文档为主,支持中英文提问)
 - **技术**:全部通用能力——RAG、双通道混合检索、ReAct Agent、评估体系、容器化部署
 - **设计**:纯 API(无本地大模型),手写核心逻辑,不依赖 LangChain
 
@@ -125,7 +124,7 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 | 项目 | 估算 | 备注 |
 |---|---|---|
 | DeepSeek 对话 | 约 10–30 元 | 大头;前缀缓存自动命中可降一个数量级 |
-| SiliconFlow embedding | 约 0.3–1 元 | 入库 10 篇论文约几十万 token |
+| SiliconFlow embedding | 约 0.3–1 元 | 入库 96 页官方文档约百万级 token 量级 |
 | SiliconFlow rerank | 约 1 元以内 | 每查询只重排 top-30 |
 | 存储(本地) | 0 元 | SQLite + Qdrant local mode |
 | **开发期合计** | **约 20–50 元** | 一次充值可用全程 |
@@ -170,22 +169,22 @@ scripts/ingest.py(入库)/ scripts/reindex.py(重建派生索引)
 
 ## 免责声明
 
-MediDoc 仅用于公开医学文献的检索与研究辅助,输出不构成医疗建议。如有医疗问题请咨询专业医生。
+DocPilot 仅面向 Python 后端开发的技术文档问答(检索范围为已入库的官方开发文档),回答为技术参考,不构成任何医疗、法律或财务建议。
 
 ## 项目总结(简历叙事)
 
 > 详细简历素材见 `resume.md`,手写练习见 `docs/手写练习清单.md`。
 
-**MediDoc** 是一个垂直领域 RAG + Agent 应用:基于 97 页 Python 后端官方开发文档
-文献,支持中英文提问、带引用溯源回答、工具调用式多步检索。核心亮点:
+**DocPilot** 是一个面向开发者技术文档的 Agentic RAG 助手:基于 96 页 Python 后端官方开发文档
+(FastAPI/Pydantic/SQLAlchemy/Python),支持中英文提问、带引用溯源回答、工具调用式多步检索。核心亮点:
 
 - **全链路手写**:双通道检索(手写 BM25 + bge-m3 向量)、RRF 融合、ReAct Agent
   循环均不依赖 LangChain,可被面试深挖;
 - **工程闭环**:SQLite 事实来源 + Qdrant/BM25 可重建索引、导入状态机、观测日志、
   提示注入防护、证据不足拒答;前端产品化(Next.js:Chat/KB/Evaluation 三页)+ FastAPI 层 + Docker 三服务交付(纯 API、CPU 可跑);
-- **量化评估**:40 条固定测试集(20% 无答案),调参将引用准确率 0.63→0.77、
-  MRR 0.85→0.90;direct/agentic 成本对比(0.005 vs 0.017 元/问)验证路由设计;
-- **成本友好**:纯 API 方案,单问成本约 0.005 元,全项目开发期花费约 1 元。
+- **量化评估**:40 条固定评估集(dev10/test30;8 条无答案全部位于 test,占全集 20%),
+  test 基线 Recall@5 0.727 / MRR 0.624 / 引用完整率 0.955 / 拒答 0.375;direct 实测 0.0046 元/问;
+- **成本友好**:纯 API 方案,单问实测约 0.0046 元(test 30 条评估共 0.137 元)。
 
 ## 学习笔记(阶段三)
 
@@ -206,7 +205,7 @@ MediDoc 仅用于公开医学文献的检索与研究辅助,输出不构成医�
 - 代码:`src/retriever/pipeline.py`(链路 30/30→30→20→6)。
 
 ### L4 跨语言检索 —— 中文问、英文答
-- 文献是英文,BM25 是字面匹配 → 中文问题先由 DeepSeek 翻译成英文查询 + 医学术语扩展;
+- 文档是英文,BM25 是字面匹配 → 中文问题先由 DeepSeek 翻译成英文查询 + 技术术语(FastAPI/OAuth2 等)扩展;
 - 稠密通道用原始中文的向量(bge-m3 多语言,中文直接检索英文);
 - 三字段 `original_query / translated_query / expanded_terms` 全保留。
 - 代码:`src/retriever/query_prep.py`。
@@ -250,8 +249,8 @@ python scripts/query.py --verbose "问题"   # 显示完整引用与观测详情
 ### Agent 工具(全部 Pydantic 参数校验)
 | 工具 | 作用 |
 |---|---|
-| `search_literature` | 检索官方开发文档库(FastAPI/Pydantic/SQLAlchemy/Python),返回带来源的证据段落(工具名沿用历史,逻辑面向文档库) |
-| `summarize_paper` | 定位并总结某篇官方文档页的核心用法(仅基于库内证据) |
+| `search_docs` | 检索官方开发文档库(FastAPI/Pydantic/SQLAlchemy/Python),返回带来源的证据段落(工具名沿用历史,逻辑面向文档库) |
+| `summarize_doc` | 定位并总结某篇官方文档页的核心用法(仅基于库内证据) |
 | `get_citation` | 为论断检索支撑证据,返回可溯源引用(链接官方文档页) |
 
 ### Agent 护栏(config.yaml `agent` 段,全部可配置)
@@ -273,7 +272,7 @@ python scripts/query.py --mode auto "任意问题"        # 自动路由
 - **自动核验**:抽样 20% 由 LLM-as-judge 打"忠实度"分,低于阈值剔除(仅辅助,非唯一标准);
 - **按文档划分 dev/test**:开发集与测试集来自不同文档,防止同一文档内容泄漏;
 - **≥20% 无答案问题**:库外事实/沾边话题类问题,检验拒答能力;
-- 当前评估集:`data/eval/dataset.jsonl`,40 条(dev 10 / test 30,无答案 26.7%)。
+- 当前评估集:`data/eval/dataset.jsonl`,完整评估集 40 条:dev 10(全有答案)/ test 30;无答案 8 条全部位于 test(占全集 20%、占 test 26.7%);检索/引用类指标在 test 有答案 22 条上计算,无答案拒答率在 8 条无答案上计算。
 
 ### 学习点 L10:检索与生成指标
 - **检索**:Recall@5 / Recall@10 / MRR / nDCG@10 —— 衡量"相关证据是否被召回且排前";
@@ -293,7 +292,7 @@ python scripts/query.py --mode auto "任意问题"        # 自动路由
 
 **评估口径与实验记录**:开发文档段落短碎、回答合理引用多个 chunk,而 gold 仅记 1 个 chunk,
 引用类指标被稀释(检索 Recall 说明证据可达);`final_context_k` 6→8 实验更差已回滚至 6;
-评估集 `data/eval/dataset.jsonl` 40 条(dev10/test30,20% 无答案,按文档划分)。
+评估集 `data/eval/dataset.jsonl` 完整评估集 40 条:dev 10(全有答案)/ test 30;无答案 8 条全部位于 test(占全集 20%、占 test 26.7%);检索/引用类指标在 test 有答案 22 条上计算,无答案拒答率在 8 条无答案上计算。 按文档划分。
 
 **调参动作**:引入"证据相关性预检"(config `rag.min_relevance_score`,rerank 分数低于阈值直接拒答)+ 精简检索上下文。
 

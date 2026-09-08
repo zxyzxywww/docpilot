@@ -96,9 +96,9 @@ def _cfg(**overrides) -> AgentConfig:
 
 def test_guardrails_repeat_detection() -> None:
     g = Guardrails(_cfg(max_consecutive_repeat=2))
-    g.record_action("search_literature", '{"question": "a"}')
+    g.record_action("search_docs", '{"question": "a"}')
     assert g.repeated_action() is False
-    g.record_action("search_literature", '{"question": "a"}')
+    g.record_action("search_docs", '{"question": "a"}')
     assert g.repeated_action() is True
 
 
@@ -137,7 +137,7 @@ def test_loop_tool_then_final(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     chat = FakeChat(
         [
-            "Thought: 需要检索\nAction: search_literature\n"
+            "Thought: 需要检索\nAction: search_docs\n"
             'Action Input: {"question": "synthetic CT methods", "top_k": 3}',
             "Thought: 已有证据\nFinal Answer: 合成CT用深度学习[1]。",
         ]
@@ -147,7 +147,7 @@ def test_loop_tool_then_final(tmp_path: Path) -> None:
     assert answer.stop_reason == StopReason.FINAL
     assert answer.steps == 1
     assert len(answer.tool_trace) == 1
-    assert answer.tool_trace[0]["tool"] == "search_literature"
+    assert answer.tool_trace[0]["tool"] == "search_docs"
     assert answer.citations  # 从检索证据构建引用
     assert answer.citations[0].title == "Synthetic CT Paper"
 
@@ -169,7 +169,7 @@ def test_loop_unknown_tool_reports(tmp_path: Path) -> None:
 def test_loop_repeat_action_stops(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     repeat = (
-        "Thought: 再查一次\nAction: search_literature\n"
+        "Thought: 再查一次\nAction: search_docs\n"
         'Action Input: {"question": "synthetic CT"}'
     )
     chat = FakeChat([repeat, repeat, "Thought: 结束\nFinal Answer: 完成。"])
@@ -181,7 +181,7 @@ def test_loop_repeat_action_stops(tmp_path: Path) -> None:
 def test_loop_max_steps_stops(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     action = (
-        "Thought: 继续\nAction: search_literature\n"
+        "Thought: 继续\nAction: search_docs\n"
         'Action Input: {"question": "synthetic CT"}'
     )
     chat = FakeChat([action, action, action, action])
@@ -195,7 +195,7 @@ def test_loop_invalid_params_reported(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     chat = FakeChat(
         [
-            "Thought: 检索\nAction: search_literature\n"
+            "Thought: 检索\nAction: search_docs\n"
             'Action Input: {"top_k": 999}',  # top_k 超界(1-10)
             "Thought: 结束\nFinal Answer: 完成。",
         ]

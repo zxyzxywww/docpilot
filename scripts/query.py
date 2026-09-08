@@ -2,7 +2,7 @@
 
 - direct 路径:中文问题 → QueryPreprocessor(翻译+术语扩展)→ bge-m3 向量
   → RetrieverPipeline(双通道+RRF+rerank)→ DirectRAG(带引用生成);
-- agentic 路径:AgentLoop 多步调用工具(search_literature / summarize_paper /
+- agentic 路径:AgentLoop 多步调用工具(search_docs / summarize_doc /
   get_citation)完成复杂综合;README 只展示结构化工具轨迹,不存思维链;
 - auto(默认):按问题复杂度自动路由(router.py)。
 

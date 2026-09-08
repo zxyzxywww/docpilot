@@ -90,21 +90,21 @@ def _evidence_text(ctx: ToolContext, chunks: list[RetrievedChunk]) -> str:
 
 # ---------------------------------------------------------------- 工具实现
 
-class SearchLiteratureParams(BaseModel):
+class SearchDocsParams(BaseModel):
     question: str = Field(..., description="要检索的开发问题(中英文均可)")
     top_k: int = Field(3, ge=1, le=10, description="返回证据条数(1-10)")
 
 
-class SearchLiterature(Tool):
-    name = "search_literature"
+class SearchDocs(Tool):
+    name = "search_docs"
     description = (
         "检索官方技术文档库(FastAPI/Pydantic/SQLAlchemy/Python),"
         "返回与问题相关的段落证据(带页面与章节来源)。"
     )
-    params = SearchLiteratureParams
+    params = SearchDocsParams
 
     def run(self, ctx: ToolContext, p: BaseModel) -> ToolResult:
-        assert isinstance(p, SearchLiteratureParams)
+        assert isinstance(p, SearchDocsParams)
         chunks = _retrieve(ctx, p.question, p.top_k)
         if not chunks:
             return ToolResult(ok=False, content="检索未命中任何相关证据,请换个说法或放宽条件。")
@@ -116,18 +116,18 @@ class SearchLiterature(Tool):
         )
 
 
-class SummarizePaperParams(BaseModel):
+class SummarizeDocParams(BaseModel):
     target: str = Field(..., description="文档标题关键词或主题,用于定位文档页")
     max_words: int = Field(200, ge=50, le=600, description="总结字数上限")
 
 
-class SummarizePaper(Tool):
-    name = "summarize_paper"
+class SummarizeDoc(Tool):
+    name = "summarize_doc"
     description = "定位并总结某篇官方文档页的核心用法,仅基于库内证据。"
-    params = SummarizePaperParams
+    params = SummarizeDocParams
 
     def run(self, ctx: ToolContext, p: BaseModel) -> ToolResult:
-        assert isinstance(p, SummarizePaperParams)
+        assert isinstance(p, SummarizeDocParams)
         chunks = _retrieve(ctx, p.target, 3)
         if not chunks:
             return ToolResult(ok=False, content="未定位到相关文档,请提供更精确的标题关键词。")
@@ -187,7 +187,7 @@ class GetCitation(Tool):
 
 
 _TOOL_REGISTRY: dict[str, Tool] = {
-    t.name: t for t in (SearchLiterature(), SummarizePaper(), GetCitation())
+    t.name: t for t in (SearchDocs(), SummarizeDoc(), GetCitation())
 }
 
 
