@@ -5,7 +5,7 @@ cd /d "%~dp0"
 set "PATH=C:\Users\29446\AppData\Local\Programs\DockerDesktop\resources\bin;%PATH%"
 
 echo ==============================================
-echo   DocPilot Knowledge Q&A - Service Launcher
+echo   DocPilot Knowledge QA - Service Launcher
 echo   Qdrant(6333) + API(8000) + Web(3000)
 echo ==============================================
 echo.
