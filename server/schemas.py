@@ -42,6 +42,23 @@ class RagReport(BaseModel):
     mode: str = "direct"
 
 
+
+
+class RunInfo(BaseModel):
+    run_id: str
+    session_id: str
+    status: str
+    mode: str = "auto"
+    question: str = ""
+    error: str | None = None
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class RunCreated(BaseModel):
+    session_id: str
+    run_id: str
+    status: str = "pending"
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     mode: str = "auto"          # auto | direct | agentic

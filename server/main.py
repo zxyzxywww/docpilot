@@ -25,18 +25,21 @@ from ingest import HTMLDocParser, IngestService, PDFParser, XMLParser  # noqa: E
 from ingest.parser import ScannedPDFError  # noqa: E402
 from llm import load_config  # noqa: E402
 
-from .rag_service import RagEngine, run_chat  # noqa: E402
+from .rag_service import RagEngine  # noqa: E402
 from .schemas import (  # noqa: E402
     ChatRequest,
     ChatResponse,
     DocumentModel,
     MessageModel,
+    RunCreated,
+    RunInfo,
     SessionInfo,
     SessionUpdate,
     StatsModel,
 )
 from .service_runtime import Service  # noqa: E402
 from .session_store import SessionStore  # noqa: E402
+from .task_runner import start_run  # noqa: E402
 
 ALLOWED_SUFFIXES = {".xml", ".pdf", ".html", ".htm"}
 MAX_UPLOAD_MB = 20
@@ -76,8 +79,8 @@ def health() -> dict[str, str]:
 # ------------------------------------------------------------ Chat / 会话
 
 
-@app.post("/api/chat", response_model=ChatResponse)
-def chat(req: ChatRequest) -> ChatResponse:
+@app.post("/api/chat", response_model=RunCreated)
+def chat(req: ChatRequest) -> RunCreated:
     store = _get_store()
     if req.session_id and store.get_session(req.session_id) is None:
         raise HTTPException(status_code=404, detail="会话不存在")
@@ -90,24 +93,37 @@ def chat(req: ChatRequest) -> ChatResponse:
         if title:
             store.update_session_title(session_id, title)
 
-    # 先落 user 消息(会话与用户问题在回答完成前就可见/可切回),再执行回答;
-    # 回答完成后把 assistant 写回同一会话(生命周期:会话存在 != 回答完成)。
+    # ---- 异步任务生命周期 ----
+    # 1) 立即落 user 消息(刷新/切走均可见);
+    # 2) 建 run(pending)并立即返回 {session_id, run_id}——不等待 RAG/Agent;
+    # 3) 后台线程执行生成,完成后写回 assistant 并把 run 置 done/failed。
     store.add_message(session_id, "user", req.question, {"mode": req.mode})
-    resp = run_chat(req.question, mode=req.mode)
-    resp.session_id = session_id
-    store.add_message(
-        session_id,
-        "assistant",
-        resp.answer,
-        {
-            "citations": [c.model_dump() for c in resp.citations],
-            "mode": resp.mode,
-            "refused": resp.refused,
-            "stop_reason": resp.stop_reason,
-            "report": resp.report.model_dump() if resp.report else None,
-        },
-    )
-    return resp
+    run = store.create_run(session_id, req.mode, req.question)
+    start_run(store, run["run_id"])
+    return RunCreated(session_id=session_id, run_id=run["run_id"], status="pending")
+
+
+@app.get("/api/runs/active", response_model=list[RunInfo])
+def list_active_runs() -> list[dict[str, Any]]:
+    """所有正在执行(pending/running)的任务:刷新后据此恢复"生成中"。"""
+    return _get_store().list_active_runs()
+
+
+@app.get("/api/runs/{run_id}", response_model=RunInfo)
+def get_run(run_id: str) -> dict[str, Any]:
+    store = _get_store()
+    run = store.get_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return run
+
+
+@app.get("/api/sessions/{session_id}/runs", response_model=list[RunInfo])
+def list_session_runs(session_id: str) -> list[dict[str, Any]]:
+    store = _get_store()
+    if store.get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return store.list_runs(session_id)
 
 
 @app.get("/api/sessions", response_model=list[SessionInfo])

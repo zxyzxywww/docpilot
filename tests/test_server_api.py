@@ -68,14 +68,40 @@ def _fake_chat_response(**kw) -> ChatResponse:
     return ChatResponse(**base)
 
 
+def _send_and_wait(
+    client: TestClient, question: str, mode: str = "direct", session_id: str | None = None
+) -> dict:
+    """POST /api/chat(立即返回 run)→ 轮询 run 至 done(后台线程执行)。"""
+    import time as _t
+
+    body: dict = {"question": question, "mode": mode}
+    if session_id:
+        body["session_id"] = session_id
+    resp = client.post("/api/chat", json=body)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["status"] == "pending" and data["run_id"]
+    last = None
+    for _ in range(200):
+        last = client.get(f"/api/runs/{data['run_id']}").json()
+        if last["status"] in ("done", "failed"):
+            assert last["status"] == "done", f"run failed: {last.get('error')}"
+            return data
+        _t.sleep(0.05)
+    raise AssertionError(f"run 未在超时内完成,最终状态: {last}")
+
+
+
 @pytest.fixture()
 def fake_run_chat(monkeypatch):
-    """chat 端点用固定响应,不触发 RAG/LLM。"""
+    """把后端 RAG/LLM 生成替换为固定响应;task_runner 后台线程调用它。"""
+
+    from server import rag_service as rs_mod
 
     def _run(question: str, mode: str = "auto") -> ChatResponse:
         return _fake_chat_response()
 
-    monkeypatch.setattr(main_mod, "run_chat", _run)
+    monkeypatch.setattr(rs_mod, "run_chat", _run)
     return _run
 
 
@@ -89,31 +115,25 @@ def test_health(client: TestClient) -> None:
 def test_chat_creates_session_and_stores_messages(
     client: TestClient, fake_service, fake_store, fake_run_chat
 ) -> None:
-    resp = client.post("/api/chat", json={"question": "什么是 RAG?", "mode": "direct"})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["session_id"]
-    assert body["answer"] == "这是假回答。"
-    assert body["report"]["total_s"] == 0.1
+    data = _send_and_wait(client, "什么是 RAG?", mode="direct")
+    sid = data["session_id"]
     # 会话标题取自首个问题
-    sid = body["session_id"]
     sess = fake_store.get_session(sid)
     assert sess["title"].startswith("什么是 RAG")
-    # 两条消息落库(user + assistant)
+    # user 先落库;后台完成后 assistant 写回同一会话
     msgs = fake_store.list_messages(sid)
-    assert [m["role"] for m in msgs] == ["user", "assistant"]
+    assert [m["role"] for m in msgs] == ["user", "assistant"], f"msgs={msgs}"
+    assert msgs[1]["extra"]["run_id"] == data["run_id"]
 
 
 def test_chat_reuses_session(
     client: TestClient, fake_service, fake_store, fake_run_chat
 ) -> None:
     sid = fake_store.create_session()["session_id"]
-    resp = client.post(
-        "/api/chat", json={"question": "追问", "mode": "auto", "session_id": sid}
-    )
-    assert resp.status_code == 200
-    assert resp.json()["session_id"] == sid
-    assert len(fake_store.list_messages(sid)) == 2
+    data = _send_and_wait(client, "追问", mode="auto", session_id=sid)
+    assert data["session_id"] == sid
+    msgs = fake_store.list_messages(sid)
+    assert [m["role"] for m in msgs] == ["user", "assistant"]
 
 
 def test_chat_unknown_session_404(
@@ -123,6 +143,9 @@ def test_chat_unknown_session_404(
         "/api/chat", json={"question": "hi", "mode": "auto", "session_id": "nonexistent"}
     )
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------- 端点
 
 
 def test_sessions_and_messages_endpoints(

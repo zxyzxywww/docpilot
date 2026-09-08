@@ -48,6 +48,18 @@ class SessionStore:
             );
             CREATE INDEX IF NOT EXISTS idx_messages_session
                 ON chat_messages(session_id, id);
+            CREATE TABLE IF NOT EXISTS chat_runs (
+                run_id       TEXT PRIMARY KEY,
+                session_id   TEXT NOT NULL,
+                status       TEXT NOT NULL DEFAULT 'pending',  -- 任务状态
+                mode         TEXT NOT NULL DEFAULT 'auto',
+                question     TEXT NOT NULL,
+                error        TEXT,
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_runs_session
+                ON chat_runs(session_id, status);
             """
         )
         # 旧库迁移:chat_sessions 增加 mode 列(历史会话默认 auto)
@@ -128,6 +140,9 @@ class SessionStore:
         with self._lock:
             with self._conn:
                 self._conn.execute(
+                    "DELETE FROM chat_runs WHERE session_id=?", (session_id,)
+                )
+                self._conn.execute(
                     "DELETE FROM chat_messages WHERE session_id=?", (session_id,)
                 )
                 self._conn.execute(
@@ -171,6 +186,71 @@ class SessionStore:
                 item["extra"] = {}
             out.append(item)
         return out
+
+
+    # ------------------------------------------------------------ Runs / Task
+
+    def create_run(
+        self, session_id: str, mode: str, question: str
+    ) -> dict[str, Any]:
+        run_id = uuid.uuid4().hex
+        ts = _now()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO chat_runs(run_id, session_id, status, mode, question,"
+                " created_at, updated_at) VALUES(?,?,?,?,?,?,?)",
+                (run_id, session_id, "pending", mode, question, ts, ts),
+            )
+            self._conn.commit()
+        return {
+            "run_id": run_id,
+            "session_id": session_id,
+            "status": "pending",
+            "mode": mode,
+            "question": question,
+            "error": None,
+            "created_at": ts,
+            "updated_at": ts,
+        }
+
+    def update_run(
+        self, run_id: str, status: str, error: str | None = None
+    ) -> None:
+        ts = _now()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE chat_runs SET status=?, error=?, updated_at=? WHERE run_id=?",
+                (status, error, ts, run_id),
+            )
+            self._conn.execute(
+                "UPDATE chat_sessions SET updated_at=? WHERE session_id="
+                "(SELECT session_id FROM chat_runs WHERE run_id=?)",
+                (ts, run_id),
+            )
+            self._conn.commit()
+
+    def get_run(self, run_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM chat_runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_runs(self, session_id: str) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM chat_runs WHERE session_id=? ORDER BY created_at DESC",
+                (session_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_active_runs(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM chat_runs WHERE status IN ('pending','running')"
+                " ORDER BY created_at DESC"
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def close(self) -> None:
         with self._lock:
