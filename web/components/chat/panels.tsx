@@ -20,6 +20,7 @@ export function SessionList({
   sessions,
   activeId,
   running = {},
+  draftActive = false,
   onSelect,
   onNew,
   onDelete,
@@ -27,6 +28,7 @@ export function SessionList({
   sessions: SessionInfo[];
   activeId: string | null;
   running?: Record<string, boolean>;
+  draftActive?: boolean;
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string) => void;
@@ -43,6 +45,20 @@ export function SessionList({
         </Button>
       </div>
       <div className="mt-2 flex-1 space-y-0.5 overflow-y-auto px-2 pb-3">
+        {/* 进行中的草稿会话(未发送首条前即立即可见、高亮) */}
+        {draftActive && (
+          <div className="flex cursor-pointer items-center gap-2 rounded-lg bg-neutral-900 px-2.5 py-2 text-left text-[13px] text-white">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate font-medium">新对话</span>
+                <span className="shrink-0 rounded bg-white/15 px-1 py-0.5 text-[10px]">
+                  草稿
+                </span>
+              </div>
+              <div className="text-[11px] text-white/50">尚未发送</div>
+            </div>
+          </div>
+        )}
         {sessions.map((s) => (
           <div
             key={s.session_id}

@@ -40,6 +40,23 @@ export interface RagReport {
   mode: string;
 }
 
+
+export interface RunCreated {
+  session_id: string;
+  run_id: string;
+  status: string;
+}
+
+export interface RunInfo {
+  run_id: string;
+  session_id: string;
+  status: string; // pending | running | done | failed | stopped
+  mode: string;
+  question: string;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
 export interface ChatResponse {
   session_id: string;
   answer: string;

@@ -1,9 +1,10 @@
 // API 客户端:浏览器直连后端(server/,端口 8000)
 import type {
   ChatMessage,
-  ChatResponse,
   EvalSummary,
   KnowledgeDocument,
+  RunCreated,
+  RunInfo,
   SessionInfo,
   Stats,
 } from "./types";
@@ -31,15 +32,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 // ------------------------------------------------------------ Chat / 会话
 
+/** 提交问答:立即返回 {session_id, run_id}(任务后台执行,轮询 run 获取结果) */
 export function chat(
   question: string,
   mode: string,
   sessionId?: string,
-): Promise<ChatResponse> {
-  return request<ChatResponse>("/api/chat", {
+): Promise<RunCreated> {
+  return request<RunCreated>("/api/chat", {
     method: "POST",
     body: JSON.stringify({ question, mode, session_id: sessionId }),
   });
+}
+
+export function getRun(runId: string): Promise<RunInfo> {
+  return request<RunInfo>(`/api/runs/${runId}`);
+}
+
+/** 刷新后恢复:所有仍 pending/running 的任务 */
+export function getActiveRuns(): Promise<RunInfo[]> {
+  return request<RunInfo[]>("/api/runs/active");
 }
 
 export function listSessions(): Promise<SessionInfo[]> {

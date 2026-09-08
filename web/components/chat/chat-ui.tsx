@@ -1,14 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowUp, BookOpen, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   chat,
-  createSession,
   deleteSession,
+  getActiveRuns,
   getMessages,
+  getRun,
   listSessions,
   patchSessionMode,
 } from "@/lib/api";
@@ -22,15 +24,21 @@ import {
   TracePanel,
 } from "./panels";
 
+const POLL_MS = 1200;
+
 /**
- * 会话级状态管理:
- * - bySession: 每个会话独立消息缓存(切走不丢进行中内容)
- * - modeBySession: 模式是会话属性(draft 用 draftMode),持久化到后端 chat_sessions.mode
- * - running: 按 session_id 标记执行中,切换会话不取消任务
- * - 生命周期: draft(未发送,不落库)→ 发送瞬间 POST /api/sessions 建会话 →
- *   user 立即写入(前端缓存+后端)→ 回答完成后 assistant 写回同一会话
+ * 会话级 + 任务级状态(以后端为唯一事实来源):
+ * - Session(chat_sessions)→ Message(chat_messages)→ Run(chat_runs)
+ * - POST /api/chat 立即返回 {session_id, run_id},任务在后台执行;
+ *   前端轮询 GET /api/runs/{run_id},完成后从后端拉全量消息(不依赖本地缓存)。
+ * - 刷新恢复:URL ?session=<id> 记住当前会话;GET /api/runs/active 恢复 running。
+ * - draft(activeId=null)作为立即可见的临时会话项,发送首条后转正为真实 session。
  */
 export function ChatUI() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlSession = searchParams.get("session");
+
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [bySession, setBySession] = useState<Record<string, ChatMessage[]>>({});
@@ -41,10 +49,10 @@ export function ChatUI() {
   const [errBySession, setErrBySession] = useState<Record<string, string>>({});
   const [draftErr, setDraftErr] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [hydrated, setHydrated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // 派生:当前渲染内容与模式
   const msgs = activeId ? (bySession[activeId] ?? []) : draftMsgs;
   const curMode = activeId ? (modeBySession[activeId] ?? "auto") : draftMode;
   const isRunning = activeId ? !!running[activeId] : false;
@@ -54,7 +62,6 @@ export function ChatUI() {
     try {
       const list = await listSessions();
       setSessions(list);
-      // 同步会话级 mode(用于切换/刷新后恢复)
       setModeBySession((prev) => {
         const next = { ...prev };
         for (const s of list) next[s.session_id] = s.mode;
@@ -65,20 +72,75 @@ export function ChatUI() {
     }
   }, []);
 
+  // 加载会话列表并读取 URL 恢复当前会话(首次挂载)
   useEffect(() => {
-    refreshSessions();
-  }, [refreshSessions]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await listSessions();
+        if (cancelled) return;
+        setSessions(list);
+        const modes: Record<string, string> = {};
+        for (const s of list) modes[s.session_id] = s.mode;
+        setModeBySession(modes);
+        if (urlSession && list.some((s) => s.session_id === urlSession)) {
+          setActiveId(urlSession);
+          const history = await getMessages(urlSession);
+          if (!cancelled) {
+            setBySession((prev) => ({ ...prev, [urlSession]: history }));
+          }
+        }
+      } catch {
+        /* 后端未启动 */
+      } finally {
+        if (!cancelled) setHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 刷新后恢复 running 任务(会话在、user 消息在、继续轮询直到完成)
+  useEffect(() => {
+    (async () => {
+      try {
+        const runs = await getActiveRuns();
+        const sids: Record<string, boolean> = {};
+        for (const r of runs) sids[r.session_id] = true;
+        setRunning(sids);
+        // 对每个 active run 启动轮询(完成即拉最新消息)
+        for (const r of runs) {
+          void pollRun(r.run_id, r.session_id);
+        }
+      } catch {
+        /* 无后端 */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [msgs, isRunning]);
 
+  // activeId → URL(刷新/前进后退可恢复;draft 态无参)
+  useEffect(() => {
+    if (hydrated) {
+      const target = activeId ? `/chat?session=${activeId}` : "/chat";
+      if (window.location.pathname + window.location.search !== target) {
+        router.replace(target, { scroll: false });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, hydrated]);
+
   const focusInput = () => {
-    // 让出当前事件循环,等渲染后再聚焦
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  /** 新建/回到空草稿:只重置本地状态,不创建任何数据库记录(场景 E) */
+  /** 新对话:立即进入可见草稿(列表出现高亮"新对话/草稿",中央欢迎页,不落库) */
   const newChat = () => {
     setActiveId(null);
     setDraftMsgs([]);
@@ -93,19 +155,8 @@ export function ChatUI() {
     setInput("");
     setDraftErr(null);
     try {
-      const history = await getMessages(id);
-      setBySession((prev) => ({
-        ...prev,
-        [id]: history.map((m) => ({
-          role: m.role,
-          content: m.content,
-          citations: m.citations ?? [],
-          refused: m.refused ?? false,
-          mode: m.mode ?? null,
-          report: m.report ?? null,
-          created_at: m.created_at,
-        })),
-      }));
+      const history = await getMessages(id); // 以后端为唯一事实来源
+      setBySession((prev) => ({ ...prev, [id]: history }));
     } catch (e) {
       setErrBySession((prev) => ({
         ...prev,
@@ -130,7 +181,6 @@ export function ChatUI() {
     }
   };
 
-  /** 更新当前会话/草稿的模式(会话级,持久化到后端) */
   const updateMode = (next: string) => {
     if (activeId) {
       setModeBySession((prev) => ({ ...prev, [activeId]: next }));
@@ -145,6 +195,30 @@ export function ChatUI() {
     }
   };
 
+  /** 轮询一个 run 直到 done/failed,完成后以后端消息为准刷新 */
+  const pollRun = async (runId: string, sid: string) => {
+    try {
+      const run = await getRun(runId);
+      if (run.status === "done" || run.status === "failed") {
+        setRunning((prev) => ({ ...prev, [sid]: false }));
+        if (run.status === "failed") {
+          setErrBySession((prev) => ({
+            ...prev,
+            [sid]: run.error ?? "回答失败,请重试",
+          }));
+        }
+        const history = await getMessages(sid);
+        setBySession((prev) => ({ ...prev, [sid]: history }));
+        refreshSessions();
+        return;
+      }
+      window.setTimeout(() => pollRun(runId, sid), POLL_MS);
+    } catch {
+      // 瞬时网络错误:稍后重试
+      window.setTimeout(() => pollRun(runId, sid), POLL_MS * 2);
+    }
+  };
+
   const send = async (text?: string) => {
     const q = (text ?? input).trim();
     if (!q || isRunning) return;
@@ -152,56 +226,39 @@ export function ChatUI() {
     if (activeId) setErrBySession((prev) => ({ ...prev, [activeId]: "" }));
     else setDraftErr(null);
 
-    // 1) 发送瞬间:若无会话先建会话(draft → 真实 session),会话存在 ≠ 回答完成
-    let sid = activeId;
-    if (!sid) {
-      try {
-        const created = await createSession();
-        sid = created.session_id;
-        setActiveId(sid);
-        setDraftMsgs([]);
-      } catch {
-        setDraftErr("创建会话失败,请确认后端已启动");
-        return;
-      }
-    }
-    const mode = modeBySession[sid] ?? "auto";
+    // 1) 草稿内容先本地显示(user);立即提交(后端建会话+user+run,毫秒级返回)
     const userMsg: ChatMessage = { role: "user", content: q, created_at: "" };
+    const draftPrevMsgs = msgs;
+    if (!activeId) setDraftMsgs([...draftPrevMsgs, userMsg]);
+    else setBySession((prev) => ({ ...prev, [activeId]: [...(prev[activeId] ?? []), userMsg] }));
 
-    // 2) user 立即可见(前端缓存 + 后端落库),标记该会话 running
+    let created: { session_id: string; run_id: string };
+    try {
+      created = await chat(q, curMode, activeId ?? undefined);
+    } catch {
+      const msg = "提交失败,请确认后端已启动";
+      if (activeId) {
+        setErrBySession((prev) => ({ ...prev, [activeId]: msg }));
+      } else {
+        setDraftErr(msg);
+        setDraftMsgs(draftPrevMsgs); // 还原草稿
+      }
+      return;
+    }
+    const sid = created.session_id;
+
+    // 2) draft 转正为真实会话:高亮切到它并立即显示 user + running
+    setActiveId(sid);
+    setDraftMsgs([]);
     setBySession((prev) => ({
       ...prev,
       [sid]: [...(prev[sid] ?? []), userMsg],
     }));
     setRunning((prev) => ({ ...prev, [sid]: true }));
-    refreshSessions(); // 让左侧立即出现新会话(标题随后台更新)
+    refreshSessions(); // 列表立即出现该会话(标题随后端更新)
 
-    // 3) 后台执行回答(同步 API 阻塞本请求,但 UI 可自由切换其他会话)
-    try {
-      const resp = await chat(q, mode, sid);
-      const assistantMsg: ChatMessage = {
-        role: "assistant",
-        content: resp.answer,
-        citations: resp.citations,
-        refused: resp.refused,
-        mode: resp.mode,
-        report: resp.report,
-        created_at: "",
-      };
-      // 4) 完成:assistant 写回同一会话(即使当前已切到别处,也按 sid 归位)
-      setBySession((prev) => ({
-        ...prev,
-        [sid]: [...(prev[sid] ?? []), assistantMsg],
-      }));
-    } catch {
-      setErrBySession((prev) => ({
-        ...prev,
-        [sid]: "回答失败,请重试(会话与问题已保留)",
-      }));
-    } finally {
-      setRunning((prev) => ({ ...prev, [sid]: false }));
-      refreshSessions();
-    }
+    // 3) 轮询任务(即使切走/刷新,running 由后端可恢复)
+    void pollRun(created.run_id, sid);
   };
 
   const lastAssistant = [...msgs].reverse().find((m) => m.role === "assistant");
@@ -215,6 +272,7 @@ export function ChatUI() {
           sessions={sessions}
           activeId={activeId}
           running={running}
+          draftActive={activeId === null}
           onSelect={selectSession}
           onNew={newChat}
           onDelete={removeSession}
