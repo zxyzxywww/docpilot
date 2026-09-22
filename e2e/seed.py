@@ -6,7 +6,7 @@
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]  # medidoc 仓库根(e2e/ 的上一级)
+ROOT = Path(__file__).resolve().parents[1]  # 仓库根(e2e/ 的上一级)
 sys.path.insert(0, str(ROOT))
 
 from server.session_store import SessionStore  # noqa: E402
