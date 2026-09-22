@@ -16,7 +16,7 @@ htmlcov/
 # ---- 密钥 ----
 .env
 
-# ---- 数据:原始文献不入库(保留 manifest 合规清单) ----
+# ---- 数据:原始文档不入库(保留 manifest 合规清单) ----
 data/raw/*
 !data/raw/manifest.jsonl
 

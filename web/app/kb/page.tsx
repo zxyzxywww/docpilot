@@ -174,7 +174,7 @@ export default function KnowledgeBasePage() {
               <Table>
                 <TableHeader>
                   <TableRow className="text-[12px]">
-                    <TableHead className="w-[40%]">文献</TableHead>
+                    <TableHead className="w-[40%]">文档</TableHead>
                     <TableHead>类型</TableHead>
                     <TableHead>状态</TableHead>
                     <TableHead className="text-right">chunk</TableHead>
@@ -189,7 +189,7 @@ export default function KnowledgeBasePage() {
                           {d.title || d.document_id}
                         </div>
                         <div className="mt-0.5 text-[11px] text-neutral-400">
-                          {d.journal}
+                          {d.source_name}
                           {d.publication_date && ` · ${d.publication_date}`}
                           {d.embedding_model && ` · ${d.embedding_model}`}
                         </div>

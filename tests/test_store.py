@@ -21,11 +21,11 @@ from ingest import (
 from ingest.parser import ParsedParagraph
 from ingest.store import _chunk_uuid
 
-SAMPLE_XML = """<pmc-articleset><article article-type="research-article">
+SAMPLE_XML = """<articleset><article article-type="research-article">
 <front><article-meta><title-group><article-title>Test</article-title></title-group></article-meta></front>
-<body><sec><title>INTRO</title><p>Deep learning based synthetic CT generation.</p>
+<body><sec><title>INTRO</title><p>Deep learning based fastapi routing usage.</p>
 <p>MR to CT synthesis with diffusion models.</p></sec></body>
-</article></pmc-articleset>"""
+</article></articleset>"""
 
 
 class FakeEmbedder:
@@ -52,10 +52,10 @@ def _manifest_rec(tmp_path: Path, doc_id: str = "doc0001", xml: str = SAMPLE_XML
     xml_path.write_text(xml, encoding="utf-8")
     return {
         "document_id": doc_id,
-        "pmcid": "PMC123",
+        "source_id": "DOC123",
         "title": "Test",
         "authors": ["A", "B"],
-        "journal": "Test J",
+        "source_name": "Test J",
         "doi": "10.1/test",
         "source_url": "https://example.org",
         "license": "CC BY",
@@ -129,8 +129,8 @@ def test_chunk_uuid_deterministic() -> None:
 
 def test_bm25_search(tmp_path: Path) -> None:
     bm25 = BM25Index()
-    bm25.build(["c1", "c2"], ["synthetic CT generation", "cooking recipes"])
-    hits = bm25.search("synthetic CT", top_k=2)
+    bm25.build(["c1", "c2"], ["fastapi routing usage", "cooking recipes"])
+    hits = bm25.search("fastapi routing", top_k=2)
     assert hits[0].chunk_id == "c1"
     assert hits[0].score > 0
     assert bm25.search("nothing here", top_k=5) == []

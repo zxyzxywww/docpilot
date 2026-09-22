@@ -5,7 +5,7 @@ export interface Citation {
   chunk_id: string;
   document_id: string;
   title: string;
-  journal: string;
+  source_name: string;
   section: string;
   page: string;
   paragraph: number;
@@ -90,7 +90,7 @@ export interface ChatMessage {
 export interface KnowledgeDocument {
   document_id: string;
   title: string;
-  journal: string;
+  source_name: string;
   publication_date: string;
   document_type: string;
   status: string;

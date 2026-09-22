@@ -224,7 +224,7 @@ class AgentLoop:
                     chunk_id=chunk.chunk_id,
                     document_id=chunk.document_id,
                     title=doc.get("title", ""),
-                    journal=doc.get("journal", ""),
+                    source_name=doc.get("source_name", ""),
                     section=chunk.section,
                     page=chunk.page,
                     paragraph=chunk.paragraph,

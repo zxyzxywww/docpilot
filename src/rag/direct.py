@@ -1,7 +1,7 @@
 """direct_rag 生成层:检索上下文 → 带引用溯源的答案。
 
 设计要点:
-- 引用强制 [1][2] 标注,每条引用返回完整信息(标题/期刊/章节/页码或段落/
+- 引用强制 [1][2] 标注,每条引用返回完整信息(标题/来源/章节/页码或段落/
   chunk_id/证据原文),禁止模型编造检索结果中不存在的来源(约束 7);
 - 证据不足必须拒答(MVP 红线);
 - 默认用提问语言回答;
@@ -39,7 +39,7 @@ SYSTEM_PROMPT = (
 )
 
 EVIDENCE_TEMPLATE = (
-    "[{idx}] 来源:{url} | 标题:{title} | 期刊:{journal} | "
+    "[{idx}] 来源:{url} | 标题:{title} | 来源:{source_name} | "
     "章节:{section} | 段落:{paragraph} | chunk:{chunk_id}\n{text}"
 )
 
@@ -63,7 +63,7 @@ class Citation:
     chunk_id: str
     document_id: str
     title: str
-    journal: str
+    source_name: str
     section: str
     page: str
     paragraph: int
@@ -101,7 +101,7 @@ class DirectRAG:
         context = retrieval.context
         if not context:
             return RagAnswer(
-                answer="检索不到与问题相关的文献证据,无法回答(证据不足)。",
+                answer="检索不到与问题相关的证据,无法回答(证据不足)。",
                 refused=True,
                 trace={"evidence_chunks": 0},
             )
@@ -111,7 +111,7 @@ class DirectRAG:
         max_rel = max(scores)
         if max_rel < self._min_relevance:
             return RagAnswer(
-                answer="检索到的文献证据与问题相关性不足,无法可靠回答(证据不足)。",
+                answer="检索到的证据与问题相关性不足,无法可靠回答(证据不足)。",
                 refused=True,
                 trace={"evidence_chunks": len(context), "max_relevance": round(max_rel, 4)},
             )
@@ -195,7 +195,7 @@ class DirectRAG:
                     idx=idx,
                     url=chunk.source_url,
                     title=doc.get("title", ""),
-                    journal=doc.get("journal", ""),
+                    source_name=doc.get("source_name", ""),
                     section=chunk.section,
                     paragraph=chunk.paragraph,
                     chunk_id=chunk.chunk_id,
@@ -227,7 +227,7 @@ class DirectRAG:
                     chunk_id=chunk.chunk_id,
                     document_id=chunk.document_id,
                     title=doc.get("title", ""),
-                    journal=doc.get("journal", ""),
+                    source_name=doc.get("source_name", ""),
                     section=chunk.section,
                     page=chunk.page,
                     paragraph=chunk.paragraph,

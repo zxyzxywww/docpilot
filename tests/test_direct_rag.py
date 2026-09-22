@@ -28,12 +28,12 @@ class FakeChat:
         )
 
 
-def _doc(store: SQLiteStore, doc_id: str, title: str = "T", journal: str = "J") -> None:
+def _doc(store: SQLiteStore, doc_id: str, title: str = "T", source_name: str = "J") -> None:
     store.upsert_document(
         {
             "document_id": doc_id,
             "title": title,
-            "journal": journal,
+            "source_name": source_name,
             "authors": [],
         },
         status="ready",
@@ -49,7 +49,7 @@ def _ctx() -> list[RetrievedChunk]:
             page="",
             paragraph=2,
             text="fastapi routing generation uses deep learning.",
-            source_url="https://example.org/PMC1",
+            source_url="https://example.org/docs/1",
             score=0.9,
         ),
         RetrievedChunk(
@@ -59,7 +59,7 @@ def _ctx() -> list[RetrievedChunk]:
             page="",
             paragraph=5,
             text="diffusion models achieve high fidelity.",
-            source_url="https://example.org/PMC2",
+            source_url="https://example.org/docs/2",
             score=0.8,
         ),
     ]
@@ -68,7 +68,7 @@ def _ctx() -> list[RetrievedChunk]:
 def _prepared() -> PreparedQuery:
     return PreparedQuery(
         original_query="磁共振到CT合成用什么方法?",
-        translated_query="methods for MR-to-CT synthesis",
+        translated_query="fastapi dependency injection",
         expanded_terms=["fastapi routing"],
     )
 
@@ -111,7 +111,7 @@ def test_answer_parses_citations(tmp_path: Path) -> None:
     c1 = out.citations[0]
     assert c1.index == 1 and c1.chunk_id == "d1_c0001"
     assert c1.title == "FastAPI Reference"
-    assert c1.journal == "Official Docs"
+    assert c1.source_name == "Official Docs"
     assert "deep learning" in c1.evidence
     store.close()
 

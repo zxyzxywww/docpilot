@@ -168,7 +168,7 @@ def main() -> int:
                 )
         if args.verbose:
             for c in citations:
-                print(f"\n[{c.index}] {c.title}({c.journal})")
+                print(f"\n[{c.index}] {c.title}({c.source_name})")
                 print(f"    章节: {c.section} | 段落: {c.paragraph} | chunk: {c.chunk_id}")
                 print(f"    来源: {c.source_url}")
                 print(f"    证据: {c.evidence[:120]}...")

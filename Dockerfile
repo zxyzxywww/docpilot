@@ -1,4 +1,4 @@
-# MediDoc API 镜像:纯 API 方案,无本地模型权重(镜像轻量,CPU 可跑)
+# DocPilot API 镜像:纯 API 方案,无本地模型权重(镜像轻量,CPU 可跑)
 FROM python:3.12-slim
 
 WORKDIR /app

@@ -84,7 +84,7 @@ def test_bm25_retriever_with_sqlite(tmp_path: Path) -> None:
             "Intro",
             "",
             1,
-            "synthetic CT generation for MR-to-CT synthesis",
+            "fastapi dependency injection",
             "u",
             10,
         ),
@@ -92,9 +92,9 @@ def test_bm25_retriever_with_sqlite(tmp_path: Path) -> None:
     sqlite._conn.commit()
 
     bm25 = BM25Index()
-    bm25.build(["d1_c0001"], ["synthetic CT generation for MR-to-CT synthesis"])
+    bm25.build(["d1_c0001"], ["fastapi dependency injection"])
     retriever = BM25Retriever(bm25, sqlite)
-    hits = retriever.search("synthetic CT", top_k=5)
+    hits = retriever.search("fastapi routing", top_k=5)
     assert len(hits) == 1
     assert hits[0].chunk_id == "d1_c0001"
     assert hits[0].section == "Intro"
@@ -106,11 +106,11 @@ def test_bm25_retriever_with_sqlite(tmp_path: Path) -> None:
 def test_pipeline_full_chain() -> None:
     dense = NS(
         search=lambda vec, top_k: [
-            _chunk("d1_c0001", "alpha synthetic CT beta"),
-            _chunk("d2_c0001", "gamma MRI to CT delta"),
+            _chunk("d1_c0001", "alpha fastapi routing beta"),
+            _chunk("d2_c0001", "gamma internal routing delta"),
         ]
     )
-    bm25 = NS(search=lambda q, top_k: [_chunk("d2_c0001", "gamma MRI to CT delta")])
+    bm25 = NS(search=lambda q, top_k: [_chunk("d2_c0001", "gamma internal routing delta")])
 
     class FakeRerank:
         def __init__(self) -> None:
@@ -118,12 +118,12 @@ def test_pipeline_full_chain() -> None:
 
         def rerank(self, query: str, documents: list[str], top_n: int | None = None):
             self.calls += 1
-            # 模拟:把含 MRI to CT 的文档排第一
+            # 模拟:把含 internal routing 的文档排第一
             from types import SimpleNamespace as RN
 
             idx = (
-                documents.index("gamma MRI to CT delta")
-                if "gamma MRI to CT delta" in documents
+                documents.index("gamma internal routing delta")
+                if "gamma internal routing delta" in documents
                 else 0
             )
             return [RN(index=idx, score=0.9, text=documents[idx])]
@@ -135,7 +135,7 @@ def test_pipeline_full_chain() -> None:
         fake,  # type: ignore[arg-type]
         RetrievalConfig(),  # 默认 30/30/30/20/6
     )
-    out = pipe.retrieve([0.1] * 4, "中文问题", translated_query="synthetic CT")
+    out = pipe.retrieve([0.1] * 4, "中文问题", translated_query="fastapi routing")
     assert fake.calls == 1
     assert len(out.context) == 1
     assert out.context[0].chunk_id == "d2_c0001"

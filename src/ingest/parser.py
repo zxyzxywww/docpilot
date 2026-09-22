@@ -1,7 +1,7 @@
-"""文档解析器:PMC JATS XML 优先,PDF 作为通用上传格式。
+"""文档解析器:XML 与 PDF(HTML 文档见下方 HTMLDocParser)。
 
 设计:
-- XML 解析仅遍历 body(不解析 back/ref-list),天然排除参考文献列表;
+- XML 解析仅遍历 body(不解析 back/ref-list),天然排除尾部引用列表;
   保留 title / section(章节路径)/ paragraph(段落序号)/ source_url。
 - PDF 解析按页提取文本,page 记录页码;扫描 PDF(无文本层)明确抛错,
   不静默生成空内容(OCR 暂不支持,属 MVP 红线)。
@@ -17,8 +17,6 @@ from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
 from pypdf import PdfReader
-
-JATS_NS = {"jats": "http://www.ncbi.nlm.nih.gov/JATS1"}
 
 
 class ParseError(Exception):
@@ -53,18 +51,21 @@ class ParsedDocument:
 # ---------------------------------------------------------------- XML 解析
 
 def _ns_for(root: ET.Element) -> dict[str, str]:
-    return JATS_NS if "{" in root.tag else {}
+    """提取任意 XML 命名空间前缀映射(兼容无命名空间的文档)。"""
+    if root.tag.startswith("{"):
+        return {"ns": root.tag[1:].split("}", 1)[0]}
+    return {}
 
 
 def _find(root: ET.Element, path: str, ns: dict[str, str]) -> ET.Element | None:
     if not ns:
-        path = path.replace("jats:", "")
+        path = path.replace("ns:", "")
     return root.find(path, ns)
 
 
 def _findall(root: ET.Element, path: str, ns: dict[str, str]) -> list[ET.Element]:
     if not ns:
-        path = path.replace("jats:", "")
+        path = path.replace("ns:", "")
     return list(root.findall(path, ns))
 
 
@@ -75,7 +76,7 @@ def _join_text(el: ET.Element | None) -> str:
 
 
 class XMLParser:
-    """PMC JATS XML 解析器。"""
+    """通用 XML 文档解析器(自动识别命名空间)。"""
 
     def parse(self, xml_bytes: bytes, document_id: str, source_url: str = "") -> ParsedDocument:
         try:
@@ -83,18 +84,18 @@ class XMLParser:
         except ET.ParseError as exc:
             raise ParseError(f"XML 解析失败: {exc}") from exc
         ns = _ns_for(root)
-        article = _find(root, ".//jats:article", ns)
+        article = _find(root, ".//ns:article", ns)
         if article is None:
             raise ParseError("未找到 article 节点")
-        title = _join_text(_find(article, ".//jats:title-group/jats:article-title", ns))
+        title = _join_text(_find(article, ".//ns:title-group/ns:article-title", ns))
         paras: list[ParsedParagraph] = []
-        body = _find(article, ".//jats:body", ns)
+        body = _find(article, ".//ns:body", ns)
         if body is not None:
             counter = 0
-            for sec in _findall(body, "jats:sec", ns):
+            for sec in _findall(body, "ns:sec", ns):
                 counter = self._walk_sec(sec, [], counter, document_id, source_url, ns, paras)
             # body 直接子段落(无 sec 包裹的文章)
-            for p in _findall(body, "jats:p", ns):
+            for p in _findall(body, "ns:p", ns):
                 text = _join_text(p)
                 if text:
                     counter += 1
@@ -121,9 +122,9 @@ class XMLParser:
         out: list[ParsedParagraph],
     ) -> int:
         """递归收集章节标题路径下的段落;嵌套章节标题并入路径,段落不重复。"""
-        title = _join_text(_find(sec, "jats:title", ns))
+        title = _join_text(_find(sec, "ns:title", ns))
         path = parent_titles + [title] if title else parent_titles
-        for p in _findall(sec, "jats:p", ns):
+        for p in _findall(sec, "ns:p", ns):
             text = _join_text(p)
             if text:
                 counter += 1
@@ -137,7 +138,7 @@ class XMLParser:
                         source_url=source_url,
                     )
                 )
-        for sub in _findall(sec, "jats:sec", ns):
+        for sub in _findall(sec, "ns:sec", ns):
             counter = self._walk_sec(sub, path, counter, document_id, source_url, ns, out)
         return counter
 
@@ -171,7 +172,7 @@ class PDFParser:
             )
         if not paras:
             raise ScannedPDFError(
-                "该 PDF 无文本层(疑似扫描件),当前版本暂不支持 OCR;请提供 PMC XML 或含文本层的 PDF"
+                "该 PDF 无文本层(疑似扫描件),当前版本暂不支持 OCR;请提供带文本层的 PDF 或 XML"
             )
         return ParsedDocument(document_id=document_id, title="", paragraphs=paras)
 

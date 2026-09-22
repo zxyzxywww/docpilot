@@ -69,10 +69,10 @@ class SQLiteStore:
             """
             CREATE TABLE IF NOT EXISTS documents (
                 document_id     TEXT PRIMARY KEY,
-                pmcid           TEXT,
+                source_id           TEXT,
                 title           TEXT,
                 authors         TEXT,          -- JSON array
-                journal         TEXT,
+                source_name         TEXT,
                 doi             TEXT,
                 source_url      TEXT,
                 license         TEXT,
@@ -107,11 +107,12 @@ class SQLiteStore:
             self._conn.execute(
                 """
                 INSERT INTO documents (
-                    document_id, pmcid, title, authors, journal, doi, source_url, license,
+                    document_id, source_id, title, authors, source_name, doi, source_url, license,
                     publication_date, document_type, sha256, local_path, status, updated_at
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(document_id) DO UPDATE SET
-                    title=excluded.title, authors=excluded.authors, journal=excluded.journal,
+                    title=excluded.title, authors=excluded.authors,
+                    source_name=excluded.source_name,
                     doi=excluded.doi, source_url=excluded.source_url, license=excluded.license,
                     publication_date=excluded.publication_date,
                     document_type=excluded.document_type,
@@ -120,10 +121,10 @@ class SQLiteStore:
                 """,
                 (
                     rec["document_id"],
-                    rec.get("pmcid", ""),
+                    rec.get("source_id", ""),
                     rec.get("title", ""),
                     json.dumps(rec.get("authors", []), ensure_ascii=False),
-                    rec.get("journal", ""),
+                    rec.get("source_name", ""),
                     rec.get("doi", ""),
                     rec.get("source_url", ""),
                     rec.get("license", ""),

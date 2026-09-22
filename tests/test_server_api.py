@@ -25,7 +25,7 @@ def fake_service(tmp_path: Path, monkeypatch) -> SimpleNamespace:
 
     docs = [
         {
-            "document_id": "doc1", "title": "测试文档 A", "journal": "Test Journal",
+            "document_id": "doc1", "title": "测试文档 A", "source_name": "Test Source",
             "publication_date": "2024", "document_type": "xml", "status": "ready",
             "chunk_count": 12, "embedding_model": "bge-m3", "source_url": "http://x",
             "error": None, "updated_at": "2026-01-01",

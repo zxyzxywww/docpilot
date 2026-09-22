@@ -10,7 +10,7 @@ class CitationModel(BaseModel):
     chunk_id: str
     document_id: str
     title: str = ""
-    journal: str = ""
+    source_name: str = ""
     section: str = ""
     page: str = ""
     paragraph: int = 0
@@ -104,7 +104,7 @@ class MessageModel(BaseModel):
 class DocumentModel(BaseModel):
     document_id: str
     title: str = ""
-    journal: str = ""
+    source_name: str = ""
     publication_date: str = ""
     document_type: str = ""
     status: str = ""

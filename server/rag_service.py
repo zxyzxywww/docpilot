@@ -25,7 +25,7 @@ def _citations_to_models(citations: list[Any]) -> list[CitationModel]:
             chunk_id=getattr(c, "chunk_id", ""),
             document_id=getattr(c, "document_id", ""),
             title=getattr(c, "title", ""),
-            journal=getattr(c, "journal", ""),
+            source_name=getattr(c, "source_name", ""),
             section=getattr(c, "section", ""),
             page=getattr(c, "page", ""),
             paragraph=getattr(c, "paragraph", 0),

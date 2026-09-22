@@ -123,7 +123,7 @@ export function CitationCard({ citation }: { citation: Citation }) {
             {citation.title || "文档"}
           </span>
           <span className="ml-2 text-[11px] text-neutral-400">
-            {citation.journal && `${citation.journal} · `}
+            {citation.source_name && `${citation.source_name} · `}
             {citation.section}
           </span>
         </span>

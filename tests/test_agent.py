@@ -46,7 +46,7 @@ class FakePipeline:
                     page="",
                     paragraph=1,
                     text="fastapi routing generation uses deep learning.",
-                    source_url="https://example.org/PMC1",
+                    source_url="https://example.org/docs/1",
                 )
             ],
             candidates=[],
@@ -70,7 +70,7 @@ class FakePreprocessor:
 def _ctx(tmp_path: Path) -> ToolContext:
     sqlite = SQLiteStore(tmp_path / "db.sqlite")
     sqlite.upsert_document(
-        {"document_id": "d1", "title": "FastAPI Reference", "journal": "Official Docs"},
+        {"document_id": "d1", "title": "FastAPI Reference", "source_name": "Official Docs"},
         status="ready",
     )
     return ToolContext(

@@ -78,7 +78,7 @@ def _citation(chunk_id: str) -> object:
     from rag.direct import Citation
 
     return Citation(
-        index=1, chunk_id=chunk_id, document_id="d", title="t", journal="j",
+        index=1, chunk_id=chunk_id, document_id="d", title="t", source_name="j",
         section="s", page="", paragraph=1, source_url="u", evidence="e",
     )
 

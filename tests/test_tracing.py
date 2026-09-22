@@ -9,13 +9,13 @@ from obs import Tracer
 
 def test_tracer_records_steps(caplog) -> None:
     tracer = Tracer()
-    tracer.step("query_prep", translated_query="synthetic CT")
+    tracer.step("query_prep", translated_query="fastapi routing")
     tracer.step("retrieve", recall_chunk_ids=["a_c0001", "b_c0001"])
     tracer.step("generate", cited_chunk_ids=["a_c0001"], cost_yuan=0.001)
     summary = tracer.summary()
     assert summary["trace_id"]
     assert [s["step"] for s in summary["steps"]] == ["query_prep", "retrieve", "generate"]
-    assert summary["steps"][0]["translated_query"] == "synthetic CT"
+    assert summary["steps"][0]["translated_query"] == "fastapi routing"
     # 时间戳递增
     times = [s["elapsed_s"] for s in summary["steps"]]
     assert times == sorted(times)

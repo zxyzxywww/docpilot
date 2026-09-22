@@ -18,16 +18,16 @@ class FakeChat:
 
 def test_prepare_records_three_fields() -> None:
     fake = FakeChat(
-        '{"translated_query": "deep learning MR-to-CT synthesis", '
-        '"expanded_terms": ["synthetic CT", "MRI to CT", "cross-modality synthesis"]}'
+        '{"translated_query": "fastapi dependency injection", '
+        '"expanded_terms": ["fastapi routing", "internal routing", "request pipeline"]}'
     )
     prep = QueryPreprocessor(fake)  # type: ignore[arg-type]
     out = prep.prepare("磁共振到CT的深度学习合成方法有哪些?")
     assert isinstance(out, PreparedQuery)
     assert "磁共振" in out.original_query
-    assert out.translated_query == "deep learning MR-to-CT synthesis"
+    assert out.translated_query == "fastapi dependency injection"
     assert len(out.expanded_terms) == 3
-    assert "synthetic CT" in out.bm25_query
+    assert "fastapi routing" in out.bm25_query
     assert fake.calls == 1
 
 
@@ -37,8 +37,8 @@ def test_extract_json_with_markdown_fence() -> None:
 
 
 def test_extract_json_with_noise() -> None:
-    text = '好的,这是结果:{"translated_query": "synthetic CT"} 完毕'
-    assert _extract_json(text) == {"translated_query": "synthetic CT"}
+    text = '好的,这是结果:{"translated_query": "fastapi routing"} 完毕'
+    assert _extract_json(text) == {"translated_query": "fastapi routing"}
 
 
 def test_prepare_falls_back_on_bad_json() -> None:

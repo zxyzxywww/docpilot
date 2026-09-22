@@ -35,10 +35,10 @@ def normalize_rec(row: dict, raw_dir: Path) -> dict:
     doc_id = hashlib.sha1(url.encode("utf-8")).hexdigest()[:12]
     return {
         "document_id": doc_id,
-        "pmcid": "",
+        "source_id": "",
         "title": row.get("title", ""),
         "authors": [],
-        "journal": row["domain"],
+        "source_name": row["domain"],
         "doi": "",
         "source_url": url,
         "license": "",

@@ -202,7 +202,7 @@ def list_documents() -> list[dict[str, Any]]:
             {
                 "document_id": d["document_id"],
                 "title": d.get("title", ""),
-                "journal": d.get("journal", ""),
+                "source_name": d.get("source_name", ""),
                 "publication_date": d.get("publication_date", ""),
                 "document_type": d.get("document_type", ""),
                 "status": d.get("status", ""),
@@ -271,10 +271,10 @@ async def upload_document(file: UploadFile) -> dict[str, Any]:
 
             rec = {
                 "document_id": doc_id,
-                "pmcid": "",
+                "source_id": "",
                 "title": parsed.title or safe_name,
                 "authors": [],
-                "journal": "用户上传",
+                "source_name": "用户上传",
                 "doi": "",
                 "source_url": "",
                 "license": "",

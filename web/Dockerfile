@@ -1,4 +1,4 @@
-# MediDoc Web 镜像(Next.js standalone)
+# DocPilot Web 镜像(Next.js standalone)
 FROM node:22-alpine AS base
 WORKDIR /app
 

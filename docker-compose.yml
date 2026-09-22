@@ -31,7 +31,7 @@ services:
       - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
       - QDRANT_URL=http://qdrant:6333
     volumes:
-      # 事实来源(SQLite)与原始文献挂载到宿主机,持久化;config 同步宿主配置
+      # 事实来源(SQLite)与原始文档挂载到宿主机,持久化;config 同步宿主配置
       - ./data:/app/data
       - ./config.yaml:/app/config.yaml:ro
     depends_on:

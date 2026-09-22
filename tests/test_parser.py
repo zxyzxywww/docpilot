@@ -1,17 +1,15 @@
-"""XML/PDF 解析器测试:章节路径、参考文献排除、命名空间兼容、扫描 PDF 报错。"""
+"""XML/PDF 解析器测试:章节路径、尾部引用排除、命名空间兼容、扫描 PDF 报错。"""
 
 from __future__ import annotations
 
 import pytest
 
 from ingest import PDFParser, ScannedPDFError, XMLParser
-from ingest.parser import JATS_NS
 
-# 无命名空间的 PMC XML 样本
-XML_PLAIN = """<pmc-articleset>
+# 无命名空间的 XML 样本
+XML_PLAIN = """<articleset>
 <article article-type="research-article">
 <front>
-<journal-meta><journal-title>Test Journal</journal-title></journal-meta>
 <article-meta>
 <title-group><article-title>Test Article</article-title></title-group>
 <article-id pub-id-type="doi">10.1000/test</article-id>
@@ -28,29 +26,30 @@ XML_PLAIN = """<pmc-articleset>
 <back><ref-list><ref><label>1</label>
 <mixed-citation>Ref one.</mixed-citation></ref></ref-list></back>
 </article>
-</pmc-articleset>"""
+</articleset>"""
 
-# 带 JATS 命名空间的版本(结构相同)
-XML_NS = XML_PLAIN.replace("<pmc-articleset>", '<pmc-articleset xmlns="' + JATS_NS["jats"] + '">')
+# 带命名空间的版本(结构相同;命名空间由解析器动态识别)
+NS_URI = "http://example.org/ns"
+XML_NS = XML_PLAIN.replace("<articleset>", f'<articleset xmlns="{NS_URI}">')
 
 
 @pytest.mark.parametrize("xml", [XML_PLAIN, XML_NS])
 def test_xml_parser_sections_and_no_references(xml: str) -> None:
-    doc = XMLParser().parse(xml.encode(), "doc123", "https://example.org/PMC1")
+    doc = XMLParser().parse(xml.encode(), "doc123", "https://example.org/docs/1")
     assert doc.title == "Test Article"
-    # back/ref-list 被排除:4 个正文段落,参考文献不算
+    # back/ref-list 被排除:4 个正文段落,尾部引用不算
     assert len(doc.paragraphs) == 4
     sections = [p.section for p in doc.paragraphs]
     assert sections == ["INTRODUCTION", "INTRODUCTION", "INTRODUCTION / Sub", "METHODS"]
     assert [p.paragraph for p in doc.paragraphs] == [1, 2, 3, 4]
-    assert all(p.source_url == "https://example.org/PMC1" for p in doc.paragraphs)
+    assert all(p.source_url == "https://example.org/docs/1" for p in doc.paragraphs)
 
 
 def test_xml_parser_no_body() -> None:
     xml = (
-        "<pmc-articleset><article><front><article-meta>"
+        "<articleset><article><front><article-meta>"
         "<title-group><article-title>T</article-title></title-group>"
-        "</article-meta></front></article></pmc-articleset>"
+        "</article-meta></front></article></articleset>"
     )
     doc = XMLParser().parse(xml.encode(), "doc1", "")
     assert doc.paragraphs == []
