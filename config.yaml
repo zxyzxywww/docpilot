@@ -16,7 +16,7 @@ llm:
   chat:
     provider: "deepseek"
     base_url: "https://api.deepseek.com"
-    model: "deepseek-v4-flash"    # 开发期;效果不足可切 deepseek-v4-pro
+    model: "deepseek-flash"    # 开发期;效果不足可切 deepseek-v4-pro
     temperature: 0.2
     max_tokens: 2048
     timeout_seconds: 60

@@ -1,6 +1,6 @@
 # DocPilot —— Python 后端开发文档问答 Agent
 
-## 项目摘要(可直接用于简历 / 作品集)
+## 项目摘要
 
 **DocPilot —— 面向 Python 后端官方开发文档的 Agentic RAG 问答系统**:96 页官方文档(FastAPI / Pydantic / SQLAlchemy / Python)入库 **12,170** 个片段,支持**中文提问、英文文档检索**,回答强制带**可点开官方原文**的引用,证据不足自动拒答;复杂需求走**自研手写 ReAct** 多步检索(不依赖 LangChain)。
 
@@ -8,6 +8,7 @@
 - **Agent 与护栏**:手写 ReAct 循环 + 3 个检索工具 + Pydantic 参数校验 + 四类护栏(最大步数 8 / 连续重复 2 / 单问预算 0.5 元 / 工具超时 30s);启发式路由分流"直接答 / 深度调研"。
 - **可靠性**:会话 / 消息 / 任务三层 SQLite 持久化 + 后台异步执行 + 前端轮询,**回答中切走或刷新页面不丢任务**;38 条真机浏览器断言验收。
 - **可复算评测**:40 条人工核验集(按文档划分防泄漏,含 8 条无答案题),test 实测 **Recall@5 0.773 / MRR 0.628 / 引用完整率 0.955 / 无答案拒答 0.625**(人工复核 8/8 正确拒答);单问成本 **0.0037 元**,指标一条命令可复算。
+- **工程质量**:110 个离线 mock 测试(默认零真实 API)+ 38 条真机浏览器断言,`ruff` / `mypy` / 前端构建全绿,CI 通过。
 
 **技术栈**:Python · FastAPI · SQLite(自研 BM25 索引) · Qdrant · DeepSeek API · bge-m3 / bge-reranker · Pydantic · Next.js / React / TypeScript · Docker Compose · GitHub Actions · pytest · playwright
 
@@ -37,7 +38,7 @@
 
 | 能力 | 方案 | 备注 |
 |---|---|---|
-| 对话/翻译/评估 | DeepSeek API(`deepseek-v4-flash`,可切 `deepseek-v4-pro`) | OpenAI 兼容,`base_url: https://api.deepseek.com` |
+| 对话/翻译/评估 | DeepSeek API(`deepseek-flash`,可切 `deepseek-v4-pro`) | OpenAI 兼容,`base_url: https://api.deepseek.com` |
 | Embedding | SiliconFlow API **`BAAI/bge-m3`**,dimension=**1024** | 固定;更换模型/维度/分块策略必须重建索引 |
 | Rerank | SiliconFlow API **`BAAI/bge-reranker-v2-m3`** | 固定 |
 | 元数据存储 | SQLite(唯一事实来源) | 文档/chunk 元数据、导入状态 |
@@ -133,7 +134,7 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 
 ## 测试与质量
 
-- `pytest`:离线 mock 测试,默认**不**调用任何真实付费 API
+- `pytest`:离线 mock 测试(当前 **110 个**),默认**不**调用任何真实付费 API
 - `pytest -m integration`:真实 API 集成测试,需 `.env` 配置 key 后手动运行
 - **真机 e2e(手动验收,非 CI)**:`e2e/` 下 `seed.py all` + `node e2e.js` 对本机 Edge + Docker 全家桶跑会话生命周期 A~H 38 断言(见 `e2e/README.md`;会调用真实 LLM,仅在人工验收时跑)
 - `ruff check .`:lint

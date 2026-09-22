@@ -22,7 +22,7 @@ def test_chat_returns_text_and_usage(monkeypatch) -> None:
     client = _make_client(monkeypatch, lambda kwargs: fake_completion("你好"))
     result = client.chat([{"role": "user", "content": "hi"}])
     assert result.text == "你好"
-    assert result.model == "deepseek-v4-flash"
+    assert result.model == "deepseek-flash"
     assert result.prompt_tokens == 10
     assert result.completion_tokens == 5
     assert result.cache_hit_tokens == 0

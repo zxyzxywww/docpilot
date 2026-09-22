@@ -24,7 +24,7 @@ API_KEY_ENV: dict[str, str] = {
 class ChatLLMConfig(BaseModel):
     provider: str = "deepseek"
     base_url: str = "https://api.deepseek.com"
-    model: str = "deepseek-v4-flash"
+    model: str = "deepseek-flash"
     temperature: float = 0.2
     max_tokens: int = 2048
     timeout_seconds: float = 60.0

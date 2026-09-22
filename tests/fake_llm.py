@@ -7,7 +7,7 @@ from types import SimpleNamespace as NS
 
 def fake_completion(
     text: str = "测试回答",
-    model: str = "deepseek-v4-flash",
+    model: str = "deepseek-flash",
     prompt_tokens: int = 10,
     completion_tokens: int = 5,
     cache_hit: int = 0,

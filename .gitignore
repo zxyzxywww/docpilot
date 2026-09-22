@@ -26,3 +26,6 @@ data/db/
 # ---- 系统 ----
 .DS_Store
 Thumbs.db
+
+# ---- Next.js 自动生成的 agent 规则文件(不入库) ----
+web/AGENTS.md
