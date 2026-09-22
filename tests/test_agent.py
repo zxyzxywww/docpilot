@@ -125,14 +125,34 @@ def test_memory_trims_old_rounds() -> None:
 
 # ---------------------------------------------------------------- ReAct 循环
 
-def test_loop_direct_final_answer(tmp_path: Path) -> None:
+def test_loop_requires_evidence_before_final(tmp_path: Path) -> None:
+    """零检索就想直接回答 → 先被要求检索一次(红线:不输出未经证据支持的结论)。"""
     ctx = _ctx(tmp_path)
-    chat = FakeChat(["Thought: 直接回答\nFinal Answer: 合成CT常用GAN[1]。"])
+    chat = FakeChat(["Thought: 直接回答\nFinal Answer: 凭记忆给出的答案。"])
     loop = AgentLoop(chat, ctx, _cfg(), ConversationMemory())  # type: ignore[arg-type]
     answer = loop.run("合成CT用什么方法?")
     assert answer.stop_reason == StopReason.FINAL
-    assert "GAN" in answer.answer
-    assert answer.steps == 0
+    assert "凭记忆给出的答案" in answer.answer
+    assert answer.steps == 1  # 被提醒"先检索"的那一步计入步数
+    assert chat.calls == 2  # 提醒后再次请求模型
+
+
+def test_loop_max_steps_summarizes_with_evidence(tmp_path: Path) -> None:
+    """撞步数上限但已有证据 → 用证据收尾成答(不再只回一句模板话)。"""
+    ctx = _ctx(tmp_path)
+    action = (
+        "Thought: 继续\nAction: search_docs\n"
+        'Action Input: {"question": "fastapi routing"}'
+    )
+    chat = FakeChat(
+        [action, action, action, "Thought: 收尾\nFinal Answer: 基于已检索证据的结论[1]。"]
+    )
+    loop = AgentLoop(chat, ctx, _cfg(max_steps=3, max_consecutive_repeat=10), ConversationMemory())  # type: ignore[arg-type]
+    answer = loop.run("问题")
+    assert answer.stop_reason == StopReason.MAX_STEPS
+    assert "基于已检索证据的结论" in answer.answer  # 来自收尾生成,而非模板话
+    assert answer.citations  # 收尾答案的 [1] 映射到真实证据
+    assert answer.citations[0].chunk_id == "d1_c0001"
 
 
 def test_loop_tool_then_final(tmp_path: Path) -> None:
