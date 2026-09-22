@@ -57,7 +57,10 @@ def setup() -> None:
     store.add_message(sf["session_id"], "user", "这个任务会失败", {"mode": "direct"})
     run = store.create_run(sf["session_id"], "direct", "这个任务会失败")
     store.update_run(run["run_id"], "failed", error="模拟网络故障(测试注入)")
-    print(f"setup done: S2={s2['session_id'][:8]} S3={s3['session_id'][:8]} SF={sf['session_id'][:8]}")
+    print(
+        f"setup done: S2={s2['session_id'][:8]} S3={s3['session_id'][:8]} "
+        f"SF={sf['session_id'][:8]}"
+    )
 
 
 def history() -> None:
