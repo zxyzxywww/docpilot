@@ -123,6 +123,7 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 
 - `pytest`:离线 mock 测试,默认**不**调用任何真实付费 API
 - `pytest -m integration`:真实 API 集成测试,需 `.env` 配置 key 后手动运行
+- **真机 e2e(手动验收,非 CI)**:`e2e/` 下 `seed.py all` + `node e2e.js` 对本机 Edge + Docker 全家桶跑会话生命周期 A~H 38 断言(见 `e2e/README.md`;会调用真实 LLM,仅在人工验收时跑)
 - `ruff check .`:lint
 - `mypy`:类型检查
 - GitHub Actions CI(`.github/workflows/ci.yml`):仅运行离线 mock 测试,不调付费 API
