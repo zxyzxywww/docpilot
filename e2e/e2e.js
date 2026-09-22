@@ -7,6 +7,7 @@ const { chromium } = require("playwright-core");
 
 const API = "http://localhost:8000";
 const WEB = "http://localhost:3000/chat";
+// 本机 Edge 路径:按你的安装位置修改(Windows 默认在 Program Files (x86))
 const EDGE = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 
 const results = [];

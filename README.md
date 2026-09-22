@@ -1,9 +1,21 @@
 # DocPilot —— Python 后端开发文档问答 Agent
 
-> **2026-09 数据域迁移**:当前语料为 Python 后端官方开发文档(FastAPI/Pydantic/SQLAlchemy/Python,96 页 / 12170 chunks,web 入库)。
-> 早期"医学文献(MR-to-CT)"内容属项目演进历史,见 git 历史与旧章节;量化评估为 DocPilot 开发文档首轮基线。
+## 项目摘要(可直接用于简历 / 作品集)
 
-> 本项目为学习与简历项目:仅基于**已入库的官方开发文档**(FastAPI/Pydantic/SQLAlchemy/Python)作答,不引入外部随意内容。
+**DocPilot —— 面向 Python 后端官方开发文档的 Agentic RAG 问答系统**:96 页官方文档(FastAPI / Pydantic / SQLAlchemy / Python)入库 **12,170** 个片段,支持**中文提问、英文文档检索**,回答强制带**可点开官方原文**的引用,证据不足自动拒答;复杂需求走**自研手写 ReAct** 多步检索(不依赖 LangChain)。
+
+- **全链路手写**:自研抓取 + HTML 解析(正文与**代码块独立成段**)+ 手写 BM25/RRF 双通道混合检索 + 交叉编码重排 + 引用溯源与拒答(空证据 / 低相关 / 灰区语义门控三层)。
+- **Agent 与护栏**:手写 ReAct 循环 + 3 个检索工具 + Pydantic 参数校验 + 四类护栏(最大步数 8 / 连续重复 2 / 单问预算 0.5 元 / 工具超时 30s);启发式路由分流"直接答 / 深度调研"。
+- **可靠性**:会话 / 消息 / 任务三层 SQLite 持久化 + 后台异步执行 + 前端轮询,**回答中切走或刷新页面不丢任务**;38 条真机浏览器断言验收。
+- **可复算评测**:40 条人工核验集(按文档划分防泄漏,含 8 条无答案题),test 实测 **Recall@5 0.773 / MRR 0.628 / 引用完整率 0.955 / 无答案拒答 0.625**(人工复核 8/8 正确拒答);单问成本 **0.0037 元**,指标一条命令可复算。
+
+**技术栈**:Python · FastAPI · SQLite(自研 BM25 索引) · Qdrant · DeepSeek API · bge-m3 / bge-reranker · Pydantic · Next.js / React / TypeScript · Docker Compose · GitHub Actions · pytest · playwright
+
+---
+
+> 仅基于**已入库的官方开发文档**(FastAPI / Pydantic / SQLAlchemy / Python)作答,不引入外部内容;技术结论必须可溯源到官方页面。
+
+> 项目早期语料为医学文献,后整体迁移为 Python 后端开发文档:检索 / 存储 / Agent 核心**零改动**,验证了"知识库可插拔"的架构分层;迁移细节见 git 历史。
 
 ## MVP 定位红线(贯穿全项目)
 
@@ -38,12 +50,13 @@
 ## 目录结构
 
 ```
-medidoc/          # = DocPilot 项目(工作区目录名沿用)
+docpilot/
 ├── README.md            # 本文件,每阶段结束更新
 ├── pyproject.toml       # 依赖与元数据 + ruff/mypy/pytest 配置
 ├── uv.lock              # 版本锁定(uv 管理)
 ├── .env.example         # DEEPSEEK_API_KEY / SILICONFLOW_API_KEY 模板
 ├── config.yaml          # 模型/检索/分块/数据库/预算/日志 全部集中
+├── e2e/                 # 会话生命周期真机验收(playwright,手动运行,非 CI)
 ├── src/
 │   ├── llm/             # DeepSeek 对话 + SiliconFlow embedding/rerank 客户端
 │   ├── ingest/          # (阶段二)数据管道
@@ -55,7 +68,7 @@ medidoc/          # = DocPilot 项目(工作区目录名沿用)
 ├── server/              # (阶段六)FastAPI 后端(前后端分离)
 ├── web/                 # (阶段六)Next.js 前端(Chat/KB/Evaluation)
 ├── data/
-│   ├── raw/             # 原始文献 + manifest.jsonl(合规清单,raw 不入库)
+│   ├── raw/             # 原始文档 + manifest.jsonl(合规清单,raw 不入库)
 │   ├── db/              # SQLite + Qdrant 持久化(不入 git,可重建)
 │   └── eval/            # 评估集与评估报告(eval_report.json)
 ├── tests/               # 默认离线 mock,不调用真实 API
@@ -64,8 +77,8 @@ medidoc/          # = DocPilot 项目(工作区目录名沿用)
 
 ## 快速开始
 
-> ⚠️ 本机注意:项目在 Windows 挂载盘 `/mnt/e` 上,`.venv`(符号链接)在此盘上不可靠,已被删除。
-> **推荐用 conda 环境**(解释器在 Linux 原生盘,稳定):
+> ⚠️ 本机提示(Linux/WSL):若把项目放在 Windows 挂载盘(如 `/mnt/<盘符>`)上,`.venv`(符号链接)在该盘上不可靠,建议改用 conda 环境(解释器在 Linux 原生盘,稳定):
+> **推荐用 conda 环境**:
 
 ```bash
 # 1. 创建 conda 环境(Python 3.12)并激活
@@ -184,9 +197,7 @@ scripts/reindex.py(重建派生索引,确定性);XML/PDF 解析器保留(上传�
 
 DocPilot 仅面向 Python 后端开发的技术文档问答(检索范围为已入库的官方开发文档),回答为技术参考,不构成任何医疗、法律或财务建议。
 
-## 项目总结(简历叙事)
-
-> 详细简历素材见 `resume.md`,手写练习见 `docs/手写练习清单.md`。
+## 项目总结
 
 **DocPilot** 是一个面向开发者技术文档的 Agentic RAG 助手:基于 96 页 Python 后端官方开发文档
 (FastAPI/Pydantic/SQLAlchemy/Python),支持中英文提问、带引用溯源回答、工具调用式多步检索。核心亮点:
@@ -199,7 +210,7 @@ DocPilot 仅面向 Python 后端开发的技术文档问答(检索范围为已�
   test 基线 Recall@5 0.773 / MRR 0.628 / 引用完整率 0.955 / 无答案拒答 0.625(规则口径;人工复核 8/8 正确拒答);direct 实测 0.0037 元/问;
 - **成本友好**:纯 API 方案,单问实测约 0.0037 元(test 30 条评估共 0.112 元)。
 
-## 学习笔记(阶段三)
+## 设计笔记(原理与取舍)
 
 ### L1 稀疏 vs 稠密检索 —— 为什么要双通道
 - **BM25(稀疏)**:关键词字面匹配,精确但"换一种说法就找不到";
@@ -252,9 +263,9 @@ python scripts/query.py --verbose "问题"   # 显示完整引用与观测详情
 - **ReAct = Reasoning + Acting**:模型交替输出"推理(Thought)→ 动作(Action)→ 观察(Observation)",直到给出最终答案;
 - 相比一次性 RAG,Agent 能**多步检索、修正查询、综合多篇证据**,适合"比较/冲突/综合"类复杂问题;
 - 本项目手写实现(不依赖 LangChain):`src/agent/loop.py`;
-- **思维链只存在于 prompt 内部**,README 与日志只展示结构化工具轨迹(工具名/耗时/成功与否),不保存完整思维链(约束 9)。
+- **思维链只存在于 prompt 内部**,README 与日志只展示结构化工具轨迹(工具名/耗时/成功与否),不保存完整思维链。
 
-### 双路径路由(约束 5)
+### 双路径路由
 - 单跳简单问题 → `direct_rag`(快、省,阶段三路径);
 - 多文档比较 / 证据冲突 / 复杂综合 → `agentic_rag`(Agent 多步工具调用);
 - 路由:启发式(长度 + 语义关键词),`src/agent/router.py`,CLI `--mode auto|direct|agentic`。
@@ -305,7 +316,7 @@ python scripts/query.py --mode auto "任意问题"        # 自动路由
 
 **评估口径与实验记录**:开发文档段落短碎、回答合理引用多个 chunk,而 gold 仅记 1 个 chunk,
 引用类指标被稀释(检索 Recall 说明证据可达);`final_context_k` 6→8 实验更差已回滚至 6;
-评估集 `data/eval/dataset.jsonl` 完整评估集 40 条:dev 10(全有答案)/ test 30;无答案 8 条全部位于 test(占全集 20%、占 test 26.7%);检索/引用类指标在 test 有答案 22 条上计算,无答案拒答率在 8 条无答案上计算。 按文档划分。
+评估集 `data/eval/dataset.jsonl` 完整评估集 40 条:dev 10(全有答案)/ test 30;无答案 8 条全部位于 test(占全集 20%、占 test 26.7%);检索/引用类指标在 test 有答案 22 条上计算,无答案拒答率在 8 条无答案上计算;dev/test 按文档划分。
 
 **调参动作**:① 引入"证据相关性预检"(config `rag.min_relevance_score`,rerank 分数低于阈值直接拒答)+ 精简检索上下文;② **2026-09 灰区语义门控**:rerank 分数落在 [0.3, 0.6)(config `rag.gate_threshold`)的"沾边"题,先生成前用一次轻量 LLM 判定"证据能否可靠回答该问题",判不可答 → 拒答——语义沾边型库外问题不再顺着证据硬答。门控只作用于灰区(域内高分题 rerank 实测 ≥0.61,零额外成本/延迟);单测覆盖拒答/放行/解析失败回退三分支。
 
@@ -363,7 +374,7 @@ Knowledge Base 页(文档管理 + 上传 XML/PDF ≤20MB + 配置展示)、Evalu
 > 已在 Windows + Docker Desktop 实机验证通过(2026-09):三服务 qdrant + api + web 全健康(api/qdrant healthcheck 200),会话生命周期经 playwright + 真机 Edge A~H 38 断言全绿(新建/发送/回答中切走/刷新恢复/历史完整性/mode 持久化/draft 无垃圾/失败恢复)。
 
 ```bash
-# 0. 国内网络首次拉镜像慢:已配置镜像加速器 docker.m.daocloud.io(~/.docker/daemon.json)
+# 0. 国内网络首次拉镜像可能较慢:可自行为 Docker 配置镜像加速器(如 docker.m.daocloud.io)
 # 1. 部署前把 config.yaml 的 qdrant.mode 改为 docker(docker_url 默认 localhost:6333)
 # 2. 启动 Qdrant 容器并等待 healthy
 docker compose up -d qdrant

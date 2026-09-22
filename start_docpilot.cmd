@@ -2,8 +2,6 @@
 title DocPilot - Start Services
 cd /d "%~dp0"
 
-set "PATH=C:\Users\29446\AppData\Local\Programs\DockerDesktop\resources\bin;%PATH%"
-
 echo ==============================================
 echo   DocPilot Knowledge QA - Service Launcher
 echo   Qdrant(6333) + API(8000) + Web(3000)
@@ -15,7 +13,7 @@ docker info >nul 2>&1
 if not errorlevel 1 goto docker_ok
 
 echo [!] Docker not running, starting Docker Desktop...
-start "" "C:\Users\29446\AppData\Local\Programs\DockerDesktop\Docker Desktop.exe"
+start "" "Docker Desktop.exe"
 echo     Waiting for Docker Desktop (up to 60s)...
 set /a n=0
 
@@ -26,6 +24,8 @@ if not errorlevel 1 goto docker_ok
 set /a n+=1
 if %n% lss 12 goto waitdocker
 echo [!] Docker failed to start. Open Docker Desktop manually, then rerun.
+echo     (If the docker command itself is missing, install Docker Desktop and
+echo      make sure its bin directory is on PATH.)
 pause
 exit /b 1
 
