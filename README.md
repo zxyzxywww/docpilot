@@ -8,14 +8,13 @@
 - **Agent 与护栏**:手写 ReAct 循环 + 3 个检索工具 + Pydantic 参数校验 + 四类护栏(最大步数 8 / 连续重复 2 / 单问预算 0.5 元 / 工具超时 30s);启发式路由分流"直接答 / 深度调研"。
 - **可靠性**:会话 / 消息 / 任务三层 SQLite 持久化 + 后台异步执行 + 前端轮询,**回答中切走或刷新页面不丢任务**;38 条真机浏览器断言验收。
 - **可复算评测**:40 条人工核验集(按文档划分防泄漏,含 8 条无答案题),test 实测 **Recall@5 0.773 / MRR 0.628 / 引用完整率 0.955 / 无答案拒答 0.625**(人工复核 8/8 正确拒答);单问成本 **0.0037 元**,指标一条命令可复算。
-- **工程质量**:110 个离线 mock 测试(默认零真实 API)+ 38 条真机浏览器断言,`ruff` / `mypy` / 前端构建全绿,CI 通过。
+- **工程质量**:111 个离线 mock 测试(默认零真实 API)+ 38 条真机浏览器断言,`ruff` / `mypy` / 前端构建全绿,CI 通过。
 
 **技术栈**:Python · FastAPI · SQLite(自研 BM25 索引) · Qdrant · DeepSeek API · bge-m3 / bge-reranker · Pydantic · Next.js / React / TypeScript · Docker Compose · GitHub Actions · pytest · playwright
 
 ---
 
 > 仅基于**已入库的官方开发文档**(FastAPI / Pydantic / SQLAlchemy / Python)作答,不引入外部内容;技术结论必须可溯源到官方页面。
-
 
 ## MVP 定位红线(贯穿全项目)
 
@@ -34,7 +33,7 @@
 - **技术**:全部通用能力——RAG、双通道混合检索、ReAct Agent、评估体系、容器化部署
 - **设计**:纯 API(无本地大模型),手写核心逻辑,不依赖 LangChain
 
-## 技术栈与模型定案(2026-08)
+## 当前技术栈与模型配置
 
 | 能力 | 方案 | 备注 |
 |---|---|---|
@@ -134,7 +133,7 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000
 
 ## 测试与质量
 
-- `pytest`:离线 mock 测试(当前 **110 个**),默认**不**调用任何真实付费 API
+- `pytest`:离线 mock 测试(当前 **111 个**),默认**不**调用任何真实付费 API
 - `pytest -m integration`:真实 API 集成测试,需 `.env` 配置 key 后手动运行
 - **真机 e2e(手动验收,非 CI)**:`e2e/` 下 `seed.py all` + `node e2e.js` 对本机 Edge + Docker 全家桶跑会话生命周期 A~H 38 断言(见 `e2e/README.md`;会调用真实 LLM,仅在人工验收时跑)
 - `ruff check .`:lint
